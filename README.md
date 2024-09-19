@@ -1,0 +1,2 @@
+# Stella
+UCI Chess Engine
