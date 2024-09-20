@@ -1,0 +1,16 @@
+# Binaries #
+###################
+*.exe
+*.o
+bin
+
+# Profile #
+###################
+*.out
+*.gcda
+*.gcno
+
+# Benchmark #
+###################
+*.epd
+*.csv
