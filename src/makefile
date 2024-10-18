@@ -12,7 +12,7 @@ OS := $(shell uname -o)
 endif
 
 # Windows based OS
-ifeq ($(UNAME), Windows_NT)
+ifeq ($(OS), Windows_NT)
 windows = yes
 endif
 
@@ -69,7 +69,7 @@ avx512 = no
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wcast-qual -fno-exceptions -pedantic -Wextra -Wshadow -Wmissing-declarations \
 					 -DMINOR_VERSION=$(MINOR) -DMAJOR_VERSION=$(MAJOR) -DNET_FILE=\"$(NET_FILE)\" \
-					 -lpthread $(EXTRA_FLAGS)
+					 -lpthread -static $(EXTRA_FLAGS)
 
 # 2.3 Flags for compiling with PGO enabled
 PRE_PGO_FLAGS = '-fprofile-generate -lgcov'
@@ -229,7 +229,7 @@ endif
 # 3.5 Executable naming
 PREFIX = linux
 SUFFIX =
-ifeq ($(OS), WINDOWS_NT)
+ifeq ($(windows), yes)
 override PREFIX = windows
 override SUFFIX = .exe
 endif
