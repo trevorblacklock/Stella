@@ -83,7 +83,7 @@ endif
 
 # 2.4.2 If arch is not defined then use Stockfish script to find native arch for the computer
 ifeq ($(ARCH), native)
-override ARCH := $(shell ../scripts/get_native_properties.sh)
+override ARCH := $(shell $(ROOT)/../scripts/get_native_properties.sh)
 endif
 
 # 2.4.3 Use the current ARCH variable to switch flags
@@ -282,7 +282,7 @@ pgo : net obj-clean pgo-clean
 	$(MAKE) ARCH=$(ARCH) EXTRA_FLAGS=$(PRE_PGO_FLAGS) all
 	@echo ""
 	@echo "Step 2/4: Running benchmark.."
-	$(EXE_PGO) bench > bench.out 2>&1
+	$(EXE_PGO) "go perft 6" "exit" > bench.out 2>&1
 	tail -n 1 bench.out
 	@echo  ""
 	@echo "Step 3/4: Building optimized executable.."

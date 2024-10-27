@@ -172,7 +172,7 @@ void Uci::parse_go(std::string command, Position &pos) {
 
         // Call perft and print the total
         uint64_t nodes = perft<true>(&pos, d);
-        std::cout << std::endl << nodes << std::endl;
+        std::cout << std::endl << "Nodes searched: " << nodes << std::endl;
     }
 }
 
