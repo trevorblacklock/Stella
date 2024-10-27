@@ -1,4 +1,4 @@
-#ifndef MISC_H_INCLUDED
+  #ifndef MISC_H_INCLUDED
 #define MISC_H_INCLUDED
 
 #include "types.hpp"
@@ -56,7 +56,7 @@ public:
   void start() { start_time = std::chrono::high_resolution_clock::now(); }
   void end() { end_time = std::chrono::high_resolution_clock::now(); }
   // Returns the elapsed time between start and end call in milliseconds
-  uint64_t elapsed() { return std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count(); }
+  uint64_t elapsed() const { return std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count(); }
 private:
   // Store the start and end times
   std::chrono::high_resolution_clock::time_point start_time;
