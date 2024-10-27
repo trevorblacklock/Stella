@@ -50,26 +50,26 @@ void TimeManager::set_time_limit(uint64_t time, uint64_t inc, int movesLeft, int
     // to derive a maximum scalar to use on timeLeft.
     if (!movesLeft) {
         // Calculate time constants in log scale.
-        double timeAdjust = 0.5 * std::log10(timeLeft) - 0.45;
         double logTime = std::log10(timeLeft / 1000.0);
-        double optimal = std::min(0.003 + 0.0003 * logTime, 0.005);
-        double max = std::max(3.5 + 3.0 * logTime, 3.0);
+        double optimal = std::min(0.003 + 0.0005 * logTime, 0.005);
+        double max = std::max(3.5 + 3.0 * logTime, 2.9);
 
         // Use time constants to find max  and optimal scale.
-        optimalScale = std::min(0.01 + std::pow(ply + 3, 0.5) * optimal, 0.2 
-                     * time / timeLeft) * timeAdjust;
+        optimalScale = std::min(0.01 + std::pow(ply, 0.5) * optimal, 0.2 * time / timeLeft);
         maxScale = std::min(6.0, max + ply / 10.0);
     }
 
     // If moves left are known, simply use that number of moves in timeLeft.
     else {
-        optimalScale = std::min((0.9 * ply / 100) / mtg, 0.9 * time / timeLeft);
+        optimalScale = std::min(ply / 500.0 + 0.5 / mtg, 0.9 * time / timeLeft);
         maxScale = std::min(6.0, 1.5 + 0.1 * mtg);
     }                 
 
+    // Calculate max and optimal time to spend on the current move.
     uint64_t optimalTime = timeLeft * optimalScale;
-    uint64_t maxTime = std::min(0.8 * time - overhead, maxScale * optimalTime);
+    uint64_t maxTime = std::min(0.7 * time - overhead, maxScale * optimalTime);
 
+    // Store these values.
     timeLimit.enabled = true;
     timeLimit.max = maxTime;
     timeLimit.optimal = optimalTime;
