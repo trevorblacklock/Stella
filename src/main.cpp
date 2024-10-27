@@ -1,10 +1,14 @@
 #include <iostream>
 
-#include "perft.hpp"
+#include "uci.hpp"
+#include "position.hpp"
+#include "bitboard.hpp"
 
 using namespace Stella;
 
 int main(int argc, char* argv[]) {
   Bitboards::init();
   Position::init();
+
+  Uci::loop(argc, argv);
 }

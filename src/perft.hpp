@@ -8,8 +8,6 @@
 
 namespace Stella {
 
-uint64_t perft(Position *pos, Depth depth);
-
 // A tool used to verify move generation. Given a depth will traverse every legal move
 // up to that depth and return the number of nodes traversed.
 template<bool root>
@@ -43,11 +41,13 @@ uint64_t perft(Position *pos, Depth depth) {
     }
 
     if (root) {
-      std::cout << move(m, pos->is_chess960()) << ": " << cnt << std::endl;
+      std::cout << from_move(m, pos->is_chess960()) << ": " << cnt << std::endl;
     }
   }
   // Return the total node count
   return nodes;
+}
+
 }
 
 #endif

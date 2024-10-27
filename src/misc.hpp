@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 
+#include <algorithm>
 #include <string_view>
 #include <vector>
 #include <sstream>
@@ -10,6 +11,12 @@
 #include <chrono>
 
 namespace Stella {
+
+// Convert a string to lowercase
+inline const std::string to_lower(std::string str) {
+  std::transform(str.begin(), str.end(), str.begin(), [](auto c) { return std::tolower(c); });
+  return str;
+}
 
 // Convert a piece to a string
 constexpr std::string_view pieceChar(".PNBRQK  pnbrqk ");
@@ -20,7 +27,7 @@ inline const std::string square(Square s) {
 }
 
 // Convert a move into a string
-inline const std::string move(Move m, bool isChess960) {
+inline const std::string from_move(Move m, bool isChess960) {
   // Get the move squares
   Square from = m.from();
   Square to = m.to();
