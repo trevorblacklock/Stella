@@ -15,7 +15,7 @@
 
 namespace Stella {
 
-Move Uci::to_move(std::string move, Position pos) {
+const Move Uci::to_move(std::string move, Position pos) {
     // Convert move to lowercase
     move = to_lower(move);
 
@@ -53,10 +53,10 @@ inline std::string find_val_from_key(std::string str, std::string key) {
     std::vector<std::string> strVector = split(str, ' ');
 
     // Store the size of the vector, ensuring to not over-index
-    size_t numWords = strVector.size();
+    int numWords = strVector.size();
 
     // Loop through the words
-    for (size_t i = 0; i < numWords; ++i) {
+    for (int i = 0; i < numWords; ++i) {
         // If key matches and a following word exists, return the next word.
         if (strVector[i] == key && i + 1 < numWords) {
             return strVector[i + 1];
@@ -113,7 +113,7 @@ void Uci::loop(int argc, char* argv[]) {
 
 
     // Loop over every argument passed by shell
-    for (size_t i = 0; i < argc; ++i) {
+    for (int i = 0; i < argc; ++i) {
         Uci::parse(argv[i], pos);
     }
 
@@ -180,18 +180,20 @@ void Uci::parse_position(std::string command, Position &pos) {
     // Find the fen and the subsequent moves
     auto fenStr = command.find("fen");
     auto movesStr = command.find("moves");
+    auto startposStr = command.find("startpos");
 
     // Store the moves
     std::string moves;
+
+    // Check for starting position
+    if (startposStr != std::string::npos) {
+        pos = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false);
+    }
 
     // Extract the fen
     if (fenStr != std::string::npos) {
         std::string fen = command.substr(fenStr + 4);
         pos = Position(fen, false);
-    }
-    // If no fen then use default position.
-    else {
-        pos = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false);
     }
 
     // Extract the moves

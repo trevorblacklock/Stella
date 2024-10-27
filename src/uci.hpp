@@ -9,7 +9,7 @@ namespace Stella {
 
 namespace Uci {
 
-Move to_move(std::string move, Position pos);
+const Move to_move(std::string move, Position pos);
 
 // Main function to call from main to loop over arguments read from command line.
 void loop(int argc, char* argv[]);
