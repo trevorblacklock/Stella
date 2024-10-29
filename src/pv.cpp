@@ -40,10 +40,9 @@ void Pv::update(Move m, Depth d) {
   // Set the first move at this depth
   lines[d][0] = m;
   // Copy the next pv to this one
-  // std::copy(std::begin(lines[d + 1].moves),
-  //           std::begin(lines[d + 1].moves) + lines[d + 1].size,
-  //           std::begin(lines[d].moves));
-  std::memcpy(&lines[d][1], &lines[d+1][0], sizeof(Move) * lines[d+1].size);
+  std::copy(lines[d + 1].moves,
+            lines[d + 1].moves + lines[d + 1].size,
+            lines[d].moves);
   // Update the size of the current Pv Line
   lines[d].size = lines[d + 1].size + 1;
 }

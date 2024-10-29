@@ -15,25 +15,6 @@
 
 namespace Stella {
 
-const Move Uci::to_move(std::string move) {
-    // Convert move to lowercase
-    move = to_lower(move);
-
-    // Generate a list of legal moves in the position
-    Generator gen(&pos);
-
-    // Store the current move
-    Move m;
-
-    // Loop through all legal moves
-    while ((m = gen.next_best<LEGAL>()) != Move::none()) {
-        if (move == from_move(m, false)) return m;
-    }
-
-    // return nothing if move was not found
-    return Move::none();
-}
-
 // Check if every element of a string is a number
 inline bool is_number(std::string str) {
     // Loop through each character
@@ -67,9 +48,23 @@ inline std::string find_val_from_key(std::string str, std::string key) {
     return "";
 }
 
-void Uci::search() {
-    Move m = s.search(&pos, &tm);
-    std::cout << "bestmove " << from_move(m, false) << std::endl;
+// Given a subset of the string, finds the string next over and set the given value.
+// Defaults to zero if value passed is not a number.
+template <typename T>
+inline T get_val_from_key(std::string str, std::string key) {
+    // Retrieve the str value
+    std::string val = find_val_from_key(str, key);
+    // Return the casted result
+    return (!val.empty() && is_number(val)) ? static_cast<T>(std::stoi(val)) 
+                                                        : static_cast<T>(0);
+}
+
+template<uint64_t>
+inline uint64_t get_val_from_key(std::string str, std::string key) {
+    // Retrieve the str value
+    std::string val = find_val_from_key(str, key);
+    // Return the casted result
+    return (!val.empty() && is_number(val)) ? std::stoull(val) : 0;
 }
 
 Uci::Uci(int argc, char* argv[]) {
@@ -83,14 +78,23 @@ Uci::~Uci() {
     quit();
 }
 
-void Uci::stop() {
-    tm.stop();
-    if (mainThread.joinable()) mainThread.join();
-}
+const Move Uci::to_move(std::string move) {
+    // Convert move to lowercase
+    move = to_lower(move);
 
-void Uci::quit() {
-    // Stop the search
-    stop();
+    // Generate a list of legal moves in the position
+    Generator gen(&pos);
+
+    // Store the current move
+    Move m;
+
+    // Loop through all legal moves
+    while ((m = gen.next_best<LEGAL>()) != Move::none()) {
+        if (move == from_move(m, false)) return m;
+    }
+
+    // return nothing if move was not found
+    return Move::none();
 }
 
 void Uci::uci() {
@@ -195,6 +199,43 @@ void Uci::parse_go(std::string command) {
     // Reset the time manager
     tm.reset();
 
+    // Extract possible keywords from input
+    // Total time left
+    uint64_t wtime = get_val_from_key<uint64_t>(command, "wtime");
+    uint64_t btime = get_val_from_key<uint64_t>(command, "btime");
+    uint64_t winc = get_val_from_key<uint64_t>(command, "winc");
+    uint64_t binc = get_val_from_key<uint64_t>(command, "binc");
+    int mtg = get_val_from_key<int>(command, "movestogo");
+
+    // Max depth
+    Depth depth = get_val_from_key<Depth>(command, "depth");
+
+    // Max nodes
+    uint64_t nodes = get_val_from_key<uint64_t>(command, "nodes");
+
+    // Time per move
+    uint64_t movetime = get_val_from_key<uint64_t>(command, "movetime");
+
+    // Set possible keywords
+    // Total time left
+    if (wtime || btime || winc || binc || mtg) {
+        uint64_t sideTime = pos.side() ? wtime : btime;
+        uint64_t sideInc = pos.side() ? winc : binc;
+        tm.set_time_limit(sideTime, sideInc, mtg, pos.move_count());
+    }
+    // Max depth
+    if (depth) {
+        tm.set_depth_limit(depth);
+    }
+    // Max nodes
+    if (nodes) {
+        tm.set_node_limit(nodes);
+    }
+    // Time per move
+    if (movetime) {
+        tm.set_move_time_limit(movetime);
+    }
+
     // Start the search
     mainThread = std::thread(&Uci::search, this);
 }
@@ -245,6 +286,21 @@ void Uci::parse_position(std::string command) {
         // Do the move otherwise
         pos.do_move<false>(move);
     }
+}
+
+void Uci::stop() {
+    tm.stop();
+    if (mainThread.joinable()) mainThread.join();
+}
+
+void Uci::quit() {
+    // Stop the search
+    stop();
+}
+
+void Uci::search() {
+    Move m = s.search(&pos, &tm);
+    std::cout << "bestmove " << from_move(m, false) << std::endl;
 }
 
 }

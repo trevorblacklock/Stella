@@ -9,6 +9,11 @@ TimeManager::TimeManager() {
     reset();
 }
 
+void TimeManager::set_move_overhead(int time) {
+    assert(time >= 0 && time <= 1000);
+    moveOverhead = time;
+}
+
 void TimeManager::reset() {
     timer.start();
     forceStop = false;

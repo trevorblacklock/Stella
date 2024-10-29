@@ -35,6 +35,7 @@ struct SearchData {
   int threadId;
   int ply;
   int rootDepth;
+  bool stop;
   Pv pvTable;
 
   uint64_t nodes;

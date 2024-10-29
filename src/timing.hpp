@@ -43,9 +43,6 @@ public:
     void set_move_time_limit(uint64_t time);
     void set_time_limit(uint64_t time, uint64_t inc, int movesLeft, int ply);
 
-    // Set the start time
-    void start_time();
-
     // Reset the time manager
     void reset();
 
