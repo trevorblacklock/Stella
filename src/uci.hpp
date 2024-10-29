@@ -2,10 +2,14 @@
 #define UCI_H_INCLUDED
 
 #include "position.hpp"
+#include "search.hpp"
+#include "timing.hpp"
 
 #include <string>
 
 namespace Stella {
+
+void search(Position* pos);
 
 namespace Uci {
 
@@ -15,13 +19,13 @@ const Move to_move(std::string move, Position pos);
 void loop(int argc, char* argv[]);
 
 // Function to parse arguments sent from the command line, entered through Uci::loop().
-void parse(std::string cmd, Position &pos);
+void parse(std::string cmd, Position& pos);
 
 // Function to parse a command beginning in "go", for example "go depth 5".
 void parse_go(std::string cmd, Position& pos);
 
 // Function to parse a command beginning in "position", for example "position startpos".
-void parse_position(std::string cmd, Position &pos);
+void parse_position(std::string cmd, Position& pos);
 
 // Function to parse a command beginning in "setoption", for example "setoption name Hash value 16".
 void parse_option(std::string opt, std::string val);

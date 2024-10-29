@@ -15,6 +15,10 @@
 
 namespace Stella {
 
+std::thread mainThread;
+Search s;
+TimeManager tm;
+
 const Move Uci::to_move(std::string move, Position pos) {
     // Convert move to lowercase
     move = to_lower(move);
@@ -67,8 +71,14 @@ inline std::string find_val_from_key(std::string str, std::string key) {
     return "";
 }
 
-void Uci::stop() {
+void search(Position* pos) {
+    Move m = s.search(pos, &tm);
+    std::cout << "bestmove " << from_move(m, false) << std::endl;
+}
 
+void Uci::stop() {
+    tm.stop();
+    if (mainThread.joinable()) mainThread.join();
 }
 
 void Uci::quit() {
@@ -103,6 +113,9 @@ void Uci::loop(int argc, char* argv[]) {
     // Setup position to default
     Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false);
 
+    // Set default thread
+    s.set_threads(1);
+
     // Send gui the engines information
     std::cout << "Stella " 
               << MAJOR_VERSION
@@ -110,7 +123,6 @@ void Uci::loop(int argc, char* argv[]) {
               << MINOR_VERSION
               << " by T. Blacklock"
               << std::endl;
-
 
     // Loop over every argument passed by shell
     for (int i = 0; i < argc; ++i) {
@@ -145,6 +157,9 @@ void Uci::parse(std::string command, Position& pos) {
     else if (token == "isready") {
         std::cout << "readyok" << std::endl;
     }
+    else if (token == "stop") {
+        stop();
+    }
     else if (token == "d") {
         std::cout << pos << std::endl;
     }
@@ -154,7 +169,7 @@ void Uci::parse(std::string command, Position& pos) {
 }
 
 void Uci::parse_go(std::string command, Position &pos) {
-    // Stop any ongoin search
+    // Stop any ongoing search
     stop();
 
     // Check a special case when running perft
@@ -173,7 +188,23 @@ void Uci::parse_go(std::string command, Position &pos) {
         // Call perft and print the total
         uint64_t nodes = perft<true>(&pos, d);
         std::cout << std::endl << "Nodes searched: " << nodes << std::endl;
+
+        // Return after perft call
+        return;
     }
+
+    // Reset the time manager
+    tm.reset();
+
+    if (command.find("movetime") != std::string::npos) {
+        std::string str = find_val_from_key(command, "movetime");
+        if (is_number(str)) {
+            tm.set_move_time_limit(stoull(str));
+        }
+    }
+
+    // Start the search
+    mainThread = std::thread(search, &pos);
 }
 
 void Uci::parse_position(std::string command, Position &pos) {

@@ -13,7 +13,11 @@ struct PvLine {
   uint8_t size = 0;
 
   // Operator to index the structure and return the move at that index
-  Move operator[](Depth d);
+  Move& operator[](Depth d);
+  Move operator[](Depth d) const;
+
+  // Reset the length of the pv line
+  void reset();
 };
 
 // Structure to store a list of PV lines for each depth of the search
@@ -24,7 +28,8 @@ struct Pv {
   uint8_t size = 0;
 
   // Operator to index the structure and return the line at that index
-  PvLine operator[](Depth d);
+  PvLine& operator[](Depth d);
+  PvLine operator[](Depth d) const;
 
   // Reset all PV lines in the structure
   void reset();

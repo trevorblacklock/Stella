@@ -20,6 +20,8 @@ struct TimeLimits : Limits {
 // search should be stopped.
 class TimeManager {
 public:
+    // Constructor
+    TimeManager();
     // Store all different types of limits
     Limits depthLimit;
     Limits nodeLimit;
@@ -48,13 +50,13 @@ public:
     void reset();
 
     // Get the elapsed time in milliseconds
-    uint64_t elapsed() const;
+    uint64_t elapsed();
 
     // Set the move overhead
     void set_move_overhead(int time);
 
     // Stop the search
-    void stop();
+    void stop() { forceStop = true; };
 };
 
 }

@@ -5,6 +5,24 @@
 
 namespace Stella {
 
+TimeManager::TimeManager() {
+    reset();
+}
+
+void TimeManager::reset() {
+    timer.start();
+    forceStop = false;
+    depthLimit = {};
+    nodeLimit = {};
+    moveTimeLimit = {};
+    timeLimit = {};
+}
+
+uint64_t TimeManager::elapsed() {
+    timer.end();
+    return timer.elapsed();
+}
+
 // Sets a limit to the depth that can be searched.
 void TimeManager::set_depth_limit(Depth d) {
     depthLimit.enabled = true;
