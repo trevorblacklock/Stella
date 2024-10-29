@@ -3,6 +3,7 @@
 #include "uci.hpp"
 #include "position.hpp"
 #include "bitboard.hpp"
+#include "perft.hpp"
 
 using namespace Stella;
 

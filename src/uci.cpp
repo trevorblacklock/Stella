@@ -195,13 +195,6 @@ void Uci::parse_go(std::string command) {
     // Reset the time manager
     tm.reset();
 
-    if (command.find("movetime") != std::string::npos) {
-        std::string str = find_val_from_key(command, "movetime");
-        if (is_number(str)) {
-            tm.set_move_time_limit(stoull(str));
-        }
-    }
-
     // Start the search
     mainThread = std::thread(&Uci::search, this);
 }

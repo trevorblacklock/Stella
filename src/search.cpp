@@ -90,8 +90,9 @@ void Search::set_threads(int num) {
     threadData.clear();
 
     // Create the new threads
-    for (int i = 0; i < threadCount; ++i)
+    for (int i = 0; i < threadCount; ++i) {
         threadData.emplace_back();
+    }
 }
 
 // Main search function called from Uci.
@@ -109,7 +110,7 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
 
     // If this function is called from the main thread, then initialize
     // all other threads and setup any needed parameters
-    if (!id) {
+    if (id == 0) {
         // Store all the root moves
         Generator gen(pos);
         Move m;
@@ -123,8 +124,8 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
         assert(tm);
         
         // Reset each thread
-        for (int i = 0; i < threadCount; ++i) {
-            threadData[i] = threadData[0];
+        for (int i = 0; i < threadCount; i++) {
+            threadData[i].rootMoves = threadData[0].rootMoves;
             threadData[i].threadId = i;
             threadData[i].nodes = 0;
             threadData[i].selDepth = 0;
@@ -136,14 +137,14 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
         // Call this function with each thread now,
         // this will skip this initialization
         for (int i = 1; i < threadCount; ++i) {
-            threads.emplace_back(&Search::search, this, pos, manager, i);
+            //threads.emplace_back(&Search::search, this, pos, manager, i);
         }
     }
 
     Value score = -VALUE_INFINITE;
 
     // Create new position for each thread so there is no memory overlap
-    Position threadPos{*pos};
+    Position threadPos = *pos;
     SearchData *sd = &threadData[id];
 
     // Start iterative deepening loop
@@ -151,6 +152,8 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
 
     Value alpha = -VALUE_INFINITE;
     Value beta = VALUE_INFINITE;
+
+    return Move::none();
 }
 
 }
