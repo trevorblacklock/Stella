@@ -98,7 +98,8 @@ void Search::set_threads(int num) {
 // Sets up threads and calls them to run alpha beta function.
 // Returns the best move found from the search, starts and stops all threads.
 Move Search::search(Position *pos, TimeManager *manager, int id) {
-    assert(pos && tm);
+    assert(pos);
+    assert(manager);
 
     // Setup the search depth if given, otherwise set it to a maximum
     Depth depth = MAX_PLY - 1;
@@ -119,6 +120,7 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
 
         // Setup the time manager
         tm = manager;
+        assert(tm);
         
         // Reset each thread
         for (int i = 0; i < threadCount; ++i) {
@@ -141,7 +143,7 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
     Value score = -VALUE_INFINITE;
 
     // Create new position for each thread so there is no memory overlap
-    Position threadPos = *pos;
+    Position threadPos{*pos};
     SearchData *sd = &threadData[id];
 
     // Start iterative deepening loop

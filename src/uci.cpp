@@ -15,11 +15,7 @@
 
 namespace Stella {
 
-std::thread mainThread;
-Search s;
-TimeManager tm;
-
-const Move Uci::to_move(std::string move, Position pos) {
+const Move Uci::to_move(std::string move) {
     // Convert move to lowercase
     move = to_lower(move);
 
@@ -71,9 +67,20 @@ inline std::string find_val_from_key(std::string str, std::string key) {
     return "";
 }
 
-void search(Position* pos) {
-    Move m = s.search(pos, &tm);
+void Uci::search() {
+    Move m = s.search(&pos, &tm);
     std::cout << "bestmove " << from_move(m, false) << std::endl;
+}
+
+Uci::Uci(int argc, char* argv[]) {
+    // Set default threads
+    s.set_threads(1);
+    // Loop over arguments
+    loop(argc, argv);
+}
+
+Uci::~Uci() {
+    quit();
 }
 
 void Uci::stop() {
@@ -107,14 +114,6 @@ void Uci::uci() {
 }
 
 void Uci::loop(int argc, char* argv[]) {
-    // On exit of program clean up before exit
-    std::atexit(Uci::quit);
-
-    // Setup position to default
-    Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false);
-
-    // Set default thread
-    s.set_threads(1);
 
     // Send gui the engines information
     std::cout << "Stella " 
@@ -126,18 +125,18 @@ void Uci::loop(int argc, char* argv[]) {
 
     // Loop over every argument passed by shell
     for (int i = 0; i < argc; ++i) {
-        Uci::parse(argv[i], pos);
+        Uci::parse(argv[i]);
     }
 
     // Process commands sent by the gui
     std::string line;
 
     while (std::getline(std::cin, line)) {
-        Uci::parse(line, pos);
+        Uci::parse(line);
     }
 }
 
-void Uci::parse(std::string command, Position& pos) {
+void Uci::parse(std::string command) {
     // Split the input with a whitespace as delimiter
     std::vector<std::string> args = split(command, ' ');
 
@@ -149,10 +148,10 @@ void Uci::parse(std::string command, Position& pos) {
         uci();
     }
     else if (token == "go") {
-        parse_go(command, pos);
+        parse_go(command);
     }
     else if (token == "position") {
-        parse_position(command, pos);
+        parse_position(command);
     }
     else if (token == "isready") {
         std::cout << "readyok" << std::endl;
@@ -168,7 +167,7 @@ void Uci::parse(std::string command, Position& pos) {
     }
 }
 
-void Uci::parse_go(std::string command, Position &pos) {
+void Uci::parse_go(std::string command) {
     // Stop any ongoing search
     stop();
 
@@ -204,10 +203,10 @@ void Uci::parse_go(std::string command, Position &pos) {
     }
 
     // Start the search
-    mainThread = std::thread(search, &pos);
+    mainThread = std::thread(&Uci::search, this);
 }
 
-void Uci::parse_position(std::string command, Position &pos) {
+void Uci::parse_position(std::string command) {
     // Find the fen and the subsequent moves
     auto fenStr = command.find("fen");
     auto movesStr = command.find("moves");
@@ -245,7 +244,7 @@ void Uci::parse_position(std::string command, Position &pos) {
         if (m.length() < 4) continue;
 
         // Create the move from string
-        Move move = to_move(m, pos);
+        Move move = to_move(m);
 
         // If move is none, return since there was an invalid move
         if (move == Move::none()) return;

@@ -9,43 +9,55 @@
 
 namespace Stella {
 
-void search(Position* pos);
+class Uci {
 
-namespace Uci {
+private:
+    std::thread mainThread;
+    Search s = Search();
+    TimeManager tm = TimeManager();
+    Position pos = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false);
 
-const Move to_move(std::string move, Position pos);
+public:
+    Uci(int argc, char* argv[]);
+    ~Uci();
 
-// Main function to call from main to loop over arguments read from command line.
-void loop(int argc, char* argv[]);
+    // Algebraic move notation to move
+    const Move to_move(std::string move);
 
-// Function to parse arguments sent from the command line, entered through Uci::loop().
-void parse(std::string cmd, Position& pos);
+    // Main function to call from main to loop over arguments read from command line.
+    void loop(int argc, char* argv[]);
 
-// Function to parse a command beginning in "go", for example "go depth 5".
-void parse_go(std::string cmd, Position& pos);
+    // Function to parse arguments sent from the command line, entered through Uci::loop().
+    void parse(std::string cmd);
 
-// Function to parse a command beginning in "position", for example "position startpos".
-void parse_position(std::string cmd, Position& pos);
+    // Function to parse a command beginning in "go", for example "go depth 5".
+    void parse_go(std::string cmd);
 
-// Function to parse a command beginning in "setoption", for example "setoption name Hash value 16".
-void parse_option(std::string opt, std::string val);
+    // Function to parse a command beginning in "position", for example "position startpos".
+    void parse_position(std::string cmd);
 
-// Stop the search.
-void stop();
+    // Function to parse a command beginning in "setoption", for example "setoption name Hash value 16".
+    void parse_option(std::string opt, std::string val);
 
-// Write Uci information to stdout.
-void uci();
+    // Stop the search.
+    void stop();
 
-// Function to return the static evaluation of a position.
-void eval();
+    // Write Uci information to stdout.
+    void uci();
 
-// Bench function to run a benchmark, used for profile guided optimization and performace testing.
-void bench();
+    // Function to return the static evaluation of a position.
+    void eval();
 
-// Quit the program.
-void quit();
+    // Bench function to run a benchmark, used for profile guided optimization and performace testing.
+    void bench();
 
-}
+    // Quit the program.
+    void quit();
+
+    // Initiate a search.
+    void search();
+};
+
 }
 
 #endif

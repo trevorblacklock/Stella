@@ -10,5 +10,5 @@ int main(int argc, char* argv[]) {
   Bitboards::init();
   Position::init();
 
-  Uci::loop(argc, argv);
+  Uci(argc, argv);
 }
