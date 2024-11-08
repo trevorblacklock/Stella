@@ -24,8 +24,8 @@ MINOR = 0
 # 1.3 Source code directory and files
 ROOT := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 SRCS := bitboard.cpp hashtable.cpp history.cpp main.cpp misc.cpp movegen.cpp \
-				position.cpp pv.cpp search.cpp timing.cpp uci.cpp nn/layers.cpp \
-				nn/accumulator.cpp nn/evaluate.cpp
+				position.cpp pv.cpp search.cpp timing.cpp uci.cpp perft.cpp \
+				nn/layers.cpp nn/accumulator.cpp nn/evaluate.cpp
 OBJS := $(SRCS:.cpp=.o)
 
 # Default neural network naming
@@ -309,7 +309,7 @@ default:
 all: $(OBJS) $(EXE)
 
 $(EXE): $(OBJS)
-	$(CXX) -o $@ $(OBJS) $(CXXFLAGS) -flto=jobserver
+	$(CXX) -o $@ $(OBJS) $(CXXFLAGS) -flto
 
 $(OBJS): %.o : %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@

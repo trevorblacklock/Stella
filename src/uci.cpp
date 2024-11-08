@@ -157,6 +157,13 @@ void Uci::parse(std::string command) {
     else if (token == "position") {
         parse_position(command);
     }
+    else if (token == "setoption") {
+        // Find the value from keyword
+        std::string opt = find_val_from_key(command, "name");
+        std::string val = find_val_from_key(command, "value");
+        // Set the option
+        parse_option(opt, val);
+    }
     else if (token == "isready") {
         std::cout << "readyok" << std::endl;
     }
@@ -189,8 +196,7 @@ void Uci::parse_go(std::string command) {
         }
 
         // Call perft and print the total
-        uint64_t nodes = perft<true>(&pos, d);
-        std::cout << std::endl << "Nodes searched: " << nodes << std::endl;
+        Perft().main_thread(&pos, d, numThreads);
 
         // Return after perft call
         return;
@@ -285,6 +291,13 @@ void Uci::parse_position(std::string command) {
 
         // Do the move otherwise
         pos.do_move<false>(move);
+    }
+}
+
+void Uci::parse_option(std::string opt, std::string val) {
+    // Check for option names
+    if (opt == "Threads") {
+        numThreads = is_number(val) ? std::stoi(val) : 1;
     }
 }
 

@@ -16,6 +16,7 @@ private:
     Search s = Search();
     TimeManager tm = TimeManager();
     Position pos = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false);
+    int numThreads = 1;
 
 public:
     Uci(int argc, char* argv[]);
