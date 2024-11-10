@@ -54,6 +54,9 @@ public:
 
     // Stop the search
     void stop() { forceStop = true; };
+
+    // Check if search can continue an iterative deepening loop
+    bool can_continue();
 };
 
 }

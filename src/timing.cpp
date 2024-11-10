@@ -46,6 +46,19 @@ void TimeManager::set_move_time_limit(uint64_t time) {
     moveTimeLimit.max = time;
 }
 
+bool TimeManager::can_continue() {
+    // Check if force stop
+    if (forceStop) return false;
+    // Get the elapsed time
+    uint64_t time = elapsed();
+    // Check if the time exceeds the limit
+    if (moveTimeLimit.enabled && time > moveTimeLimit.max) return false;
+    if (timeLimit.enabled && time > timeLimit.max) return false;
+
+    // Return true by default
+    return true;
+}
+
 // Given the total time, increment and expected number of moves left,
 // calculates a maximum time to spend on the current move. This is
 // further shortened using heuristics from the search to determine
@@ -63,7 +76,7 @@ void TimeManager::set_time_limit(uint64_t time, uint64_t inc, int movesLeft, int
     }
 
     // Make sure the time left is above zero.
-    uint64_t timeLeft = std::max(static_cast<uint64_t>(1), time + inc * mtg 
+    uint64_t timeLeft = std::max(static_cast<uint64_t>(1), time + inc * mtg
                       - overhead * mtg);
 
     // Store the maximum scale.
@@ -86,7 +99,7 @@ void TimeManager::set_time_limit(uint64_t time, uint64_t inc, int movesLeft, int
     else {
         optimalScale = std::min(ply / 500.0 + 0.5 / mtg, 0.9 * time / timeLeft);
         maxScale = std::min(6.0, 1.5 + 0.1 * mtg);
-    }                 
+    }
 
     // Calculate max and optimal time to spend on the current move.
     uint64_t optimalTime = timeLeft * optimalScale;
