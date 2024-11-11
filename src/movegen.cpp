@@ -90,7 +90,7 @@ Move Generator::next() {
     return Move::none();
 }
 
-Generator::Generator(Position *p) {
+Generator::Generator(Position* p) {
     // Initialize the generator object
     pos = p;
     side = pos->side();

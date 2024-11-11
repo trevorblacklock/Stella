@@ -46,7 +46,7 @@ private:
 
 public:
     // Main perft call
-    void main_thread(Position *pos, Depth depth, int concurrency);
+    void main_thread(Position* pos, Depth depth, int concurrency);
 };
 
 }

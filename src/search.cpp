@@ -54,9 +54,9 @@ void Search::print_info_string() {
 
     // Print the pv line if one exists, otherwise print the best move
     if (pv.size)
-        for (int i = 0; i < pv.size; i++) std::cout << " " << from_move(pv.moves[i], false);
+        for (int i = 0; i < pv.size; i++) std::cout << " " << from_move(pv.moves[i], chess960);
     else
-        std::cout << " " << from_move(mainThread.bestMove, false);
+        std::cout << " " << from_move(mainThread.bestMove, chess960);
 
     // End with a newline
     std::cout << std::endl;
@@ -99,7 +99,7 @@ void Search::set_threads(int num) {
 // Main search function called from Uci.
 // Sets up threads and calls them to run alpha beta function.
 // Returns the best move found from the search, starts and stops all threads.
-Move Search::search(Position *pos, TimeManager *manager, int id) {
+Move Search::search(Position* pos, TimeManager* manager, int id) {
     assert(pos);
     assert(manager);
 
@@ -108,9 +108,6 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
 
     // Set the manager defaults
     manager->forceStop = false;
-
-    // Set a new search for the transposition table
-    table.new_search();
 
     // Setup the search depth if given, otherwise set it to a maximum
     Depth maxDepth = MAX_PLY - 1;
@@ -121,13 +118,18 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
     // If this function is called from the main thread, then initialize
     // all other threads and setup any needed parameters
     if (mainThread) {
+        // Set a new search for the transposition table
+        table.new_search();
+        // Set chess960 flag
+        chess960 = pos->is_chess960();
+
         // Store all the root moves
         Generator gen(pos);
         Move m;
 
         // Loop through the moves
         while ((m = gen.next_best<LEGAL>()) != Move::none())
-            threadData[0].rootMoves.emplace_back(RootMove(m));
+            rootMoves.emplace_back(RootMove(m));
 
         // Setup the time manager
         tm = manager;
@@ -135,7 +137,7 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
 
         // Reset each thread
         for (int i = 0; i < threadCount; i++) {
-            threadData[i].rootMoves = threadData[0].rootMoves;
+            // Allocate a stack up to max ply for search data, using ply + 7 for continuation histories
             threadData[i].threadId = i;
             threadData[i].stop = false;
             threadData[i].nodes = 0;
@@ -145,7 +147,7 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
             threadData[i].bestMove = Move::none();
         }
 
-        // Call this function with each thread now,
+        // Call this function with each non main thread now,
         // this will skip this initialization
         for (int i = 1; i < threadCount; ++i) {
             threads.emplace_back(&Search::search, this, pos, manager, i);
@@ -156,7 +158,7 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
 
     // Create new position for each thread so there is no memory overlap
     Position newPos = *pos;
-    SearchData *sd = &threadData[id];
+    SearchData* sd = &threadData[id];
 
     // Start iterative deepening loop
     Value average = -VALUE_INFINITE;
@@ -280,7 +282,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
     Value ttScore = found ? from_tt(entry->score(), sd->ply) : VALUE_NONE;
 
     // Set the tt move
-    ttMove = root ? sd->rootMoves[0].m : found ? entry->move() : Move::none();
+    ttMove = root ? rootMoves[0].m : found ? entry->move() : Move::none();
 
     // Check if tt can be used for an early cutoff
     if (found
@@ -330,7 +332,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
             std::cout << "info depth "
                       << sd->rootDepth
                       << " currmove "
-                      << from_move(m, pos->is_chess960())
+                      << from_move(m, chess960)
                       << " currmovenumber "
                       << moveCnt
                       << std::endl;

@@ -8,6 +8,7 @@
 #include "tt.hpp"
 #include "history.hpp"
 #include "pv.hpp"
+#include "history.hpp"
 
 #include <thread>
 
@@ -30,8 +31,9 @@ struct RootMove {
     RootMove(Move move) { m = move; }
 };
 
-// Structure for storing information to be continuously updated and used through recursive search
-struct SearchData {
+// Structure for storing information to be continuously updated and used through recursive search.
+// Inherits move histories which are updated ply by ply in a new instance.
+struct SearchData : History {
     int threadId;
     int ply;
     int rootDepth;
@@ -42,8 +44,6 @@ struct SearchData {
     Depth selDepth;
     Value score;
     Move bestMove;
-
-    std::vector<RootMove> rootMoves;
 
     SearchData();
     explicit SearchData(int id);
@@ -58,8 +58,13 @@ private:
     std::vector<std::thread> threads;
     std::vector<SearchData> threadData;
 
+    // Store the rootmoves of the position
+    std::vector<RootMove> rootMoves;
+
     // Flag for enabling/disabling info strings
     bool infoStrings = true;
+    // Flag for chess960
+    bool chess960 = false;
 
     // Time manager
     TimeManager* tm;
@@ -76,11 +81,11 @@ public:
     void stop();
 
     // Main search function to launch threads
-    Move search(Position* pos, TimeManager *manager, int id = 0);
+    Move search(Position* pos, TimeManager* manager, int id = 0);
 
     // Alpha beta pruning function, takes into account many heuristics to return an evaluation
     template<NodeType nodeType>
-    Value alphabeta(Position* pos, SearchData *sd, Value alpha, Value beta, Depth depth);
+    Value alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, Depth depth);
 
     // Qsearch function for evaluating a position taking into account the available captures
     template<NodeType nodeType>

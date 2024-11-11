@@ -8,7 +8,7 @@
 
 namespace Stella {
 
-void Perft::main_thread(Position *pos, Depth depth, int concurrency) {
+void Perft::main_thread(Position* pos, Depth depth, int concurrency) {
     assert(pos);
     assert(depth);
 
@@ -124,7 +124,7 @@ void Perft::worker(Position* pos, Depth depth) {
 
 // A tool used to verify move generation. Given a depth will traverse every legal move
 // up to that depth and return the number of nodes traversed.
-uint64_t Perft::perft(Position *pos, Depth depth) {
+uint64_t Perft::perft(Position* pos, Depth depth) {
     // If depth is 0 just return 0 nodes
     if (depth <= 0) return 1;
     // Set initial count to zero

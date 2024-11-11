@@ -97,7 +97,7 @@ const Move Uci::to_move(std::string move) {
 
     // Loop through all legal moves
     while ((m = gen.next_best<LEGAL>()) != Move::none()) {
-        if (move == from_move(m, false)) return m;
+        if (move == from_move(m, pos.is_chess960())) return m;
     }
 
     // return nothing if move was not found
@@ -308,6 +308,7 @@ void Uci::parse_option(std::string opt, std::string val) {
     // Check for option names
     if (opt == "Threads") {
         numThreads = is_number(val) ? std::stoi(val) : 1;
+        s.set_threads(numThreads);
     }
     else if (opt == "Hash") {
         size_t mb = is_number(val) ? std::stoi(val) : 16;
@@ -329,7 +330,7 @@ void Uci::quit() {
 
 void Uci::search() {
     Move m = s.search(&pos, &tm);
-    std::cout << "bestmove " << from_move(m, false) << std::endl;
+    std::cout << "bestmove " << from_move(m, pos.is_chess960()) << std::endl;
 }
 
 }

@@ -21,7 +21,7 @@ extern TTtable table;
 // 8 bits -> node
 // 8 bits -> age
 //
-// Totals to
+// Totals to 13 bytes, aligned to 16 bytes for faster accessing
 struct alignas(16) TTentry {
 public:
     // Return members of the entry

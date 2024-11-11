@@ -70,7 +70,7 @@ private:
     // Store the side to move
     Color side;
     // Store a pointer to the active position
-    Position *pos;
+    Position* pos;
     // Store the passed move from the transposition table
     Move ttMove;
     // Whether quiet generation should be skipped, relevant in certain
