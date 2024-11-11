@@ -236,8 +236,8 @@ constexpr Direction operator+(Direction d1, Direction d2) { return Direction(int
 constexpr Direction operator-(Direction d1, Direction d2) { return Direction(int(d1) - int(d2)); }
 
 // Allow adding a direction to a square
-constexpr Square operator+(Square s, Direction d) { return s = Square(int(s) + int(d)); }
-constexpr Square operator-(Square s, Direction d) { return s = Square(int(s) - int(d)); }
+constexpr Square operator+(Square s, Direction d) { return Square(int(s) + int(d)); }
+constexpr Square operator-(Square s, Direction d) { return Square(int(s) - int(d)); }
 inline Square& operator+=(Square& s, Direction d) { return s = s + d; }
 inline Square& operator-=(Square& s, Direction d) { return s = s - d; }
 

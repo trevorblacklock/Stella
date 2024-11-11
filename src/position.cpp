@@ -79,8 +79,6 @@ Position::Position(const std::string& fen, bool chess960) {
 
   // FEN strings begin from A8
   Square s = A8;
-  // Keep track of the piece
-  Piece pc;
   // Keep track of the current token read in by the stream
   char token;
   // Create a string stream to read in the FEN string
@@ -102,7 +100,8 @@ Position::Position(const std::string& fen, bool chess960) {
     // Check if the token is a slash for new rank
     else if (token == '/') s += SOUTH_SOUTH;
     // Check for token identifying a piece to place
-    else if ((pc = Piece(pieceChar.find(token))) != std::string::npos) {
+    else if (pieceChar.find(token) != std::string::npos) {
+      Piece pc = Piece(pieceChar.find(token));
       // For each set piece adjust the hash key
       current->key ^= Zobrist::pieces[pc][s];
       set_piece(pc, s);
