@@ -50,7 +50,7 @@ void Search::print_info_string() {
         std::cout << (bound == BOUND_LOWER ? " lowerbound" : " upperbound") ;
 
     // Print search information
-    std::cout << " nodes " << nodes << " nps " << nps << " time " << elapsed << " pv";
+    std::cout << " nodes " << nodes << " nps " << nps << " time " << elapsed << " hashfull " << table.hashfull() << " pv";
 
     // Print the pv line if one exists, otherwise print the best move
     if (pv.size)
@@ -108,6 +108,9 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
 
     // Set the manager defaults
     manager->forceStop = false;
+
+    // Set a new search for the transposition table
+    table.new_search();
 
     // Setup the search depth if given, otherwise set it to a maximum
     Depth maxDepth = MAX_PLY - 1;
@@ -171,7 +174,7 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
         sd->rootDepth = depth;
 
         // Run the search
-        score = alphabeta(&newPos, sd, alpha, beta, depth);
+        score = alphabeta<PV>(&newPos, sd, alpha, beta, depth);
 
         // Set this score in the search data
         sd->score = score;
@@ -204,15 +207,16 @@ Move Search::search(Position *pos, TimeManager *manager, int id) {
     return Move::none();
 }
 
+template<NodeType nodeType>
 Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, Depth depth) {
     // Get some definitions for the current search
     Color us = pos->side();
-    bool pvNode = (beta - alpha) != 1;
     bool root = sd->ply == 0;
+    bool pvNode = nodeType == PV;
     bool mainThread = sd->threadId == 0;
 
     // Assert some things
-    assert(sd->ply >= 0 && sd->ply < MAX_PLY);
+    assert(sd->ply >= 0 && sd->ply <= MAX_PLY);
     assert(alpha >= -VALUE_INFINITE);
     assert(beta <= VALUE_INFINITE);
     assert(beta > alpha);
@@ -222,7 +226,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
     sd->pvTable[sd->ply].reset();
 
     // Check if depth is zero, if true then return an evaluation
-    if (depth == 0) return Evaluate::evaluate(pos);
+    if (depth <= 0) return qsearch<nodeType>(pos, sd, alpha, beta);
 
     // Check for a force stop
     if (tm->forceStop) {
@@ -238,20 +242,22 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
         return beta;
     }
 
-    // Update the seldepth
-    if (sd->ply > sd->selDepth) sd->selDepth = sd->ply;
-
     // Increment nodes
     sd->nodes++;
 
+    // Update the seldepth
+    if (sd->ply + 1 > sd->selDepth) sd->selDepth = sd->ply + 1;
+
     // Get all search info needed
     bool  inCheck   = pos->checks();
+    bool  found     = false;
     Key   key       = pos->key();
     Value bestScore = -VALUE_INFINITE;
     Value score     = -VALUE_INFINITE;
     Value standpat  = VALUE_NONE;
     Value eval      = VALUE_NONE;
     Move  bestMove  = Move::none();
+    Move  ttMove    = Move::none();
 
     // Check for a draw
     if (sd->ply && pos->is_draw())
@@ -259,8 +265,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
         return 8 - (sd->nodes & 0xF);
 
     // Check for max ply value and not in check, to return eval
-    if (sd->ply == MAX_PLY - 1 && !inCheck)
-        return Evaluate::evaluate(pos);
+    if (sd->ply >= MAX_PLY)
+        return !inCheck ? Evaluate::evaluate(pos) : VALUE_DRAW;
 
     // Mate distance pruning
     if (sd->ply) {
@@ -269,8 +275,26 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
         if (alpha >= beta) return alpha;
     }
 
+    // Check for a transposition table entry
+    TTentry* entry = table.probe(key, found);
+    Value ttScore = found ? from_tt(entry->score(), sd->ply) : VALUE_NONE;
+
+    // Set the tt move
+    ttMove = root ? sd->rootMoves[0].m : found ? entry->move() : Move::none();
+
+    // Check if tt can be used for an early cutoff
+    if (found
+        && !pvNode
+        && entry->depth() > depth - (entry->score() <= beta)
+        && ttScore != VALUE_NONE
+        && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER))) {
+
+        // So long as fifty move rule is not large, can return the score
+        if (pos->fifty_rule() < 90) return ttScore;
+    }
+
     // Create move generator
-    Generator gen(pos, sd->ply);
+    Generator gen(pos, PV_SEARCH, ttMove);
     Move m;
 
     // Count the number of moves
@@ -302,7 +326,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
         moveCnt++;
 
         // Send information about the current move if enough time has passed
-        if (root && mainThread && infoStrings && tm->elapsed() > 3000) {
+        if (root && mainThread && infoStrings && !sd->stop && tm->elapsed() > 3000) {
             std::cout << "info depth "
                       << sd->rootDepth
                       << " currmove "
@@ -320,12 +344,12 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
 
         // Principle Variation Search (PVS)
         if (legalMoves == 0)
-            score = -alphabeta(pos, sd, -beta, -alpha, newDepth);
+            score = -alphabeta<PV>(pos, sd, -beta, -alpha, newDepth);
         else {
-            score = -alphabeta(pos, sd, -alpha - 1, -alpha, newDepth);
+            score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, newDepth);
             // Do a full re-search if score is with alpha and beta bounds
             if (score > alpha && score < beta)
-                score = -alphabeta(pos, sd, -beta, -alpha, newDepth);
+                score = -alphabeta<PV>(pos, sd, -beta, -alpha, newDepth);
         }
 
         // Ensure the score falls within bounds
@@ -348,7 +372,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
             bestMove = m;
 
             // If at a low depth and can continue set the best move
-            if (!sd->ply && (tm->can_continue() || depth <= 2))
+            if (root && tm->can_continue())
                 sd->bestMove = m;
 
             // Update the pv at pv nodes
@@ -357,6 +381,9 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
 
             // Check for a beta cutoff
             if (score >= beta) {
+                // Store the result in the transposition table
+                table.save<nodeType>(key, depth, to_tt(score, sd->ply), VALUE_ZERO, m, BOUND_LOWER);
+                // Return the score
                 return score;
             }
             // Check for a fail high
@@ -370,6 +397,117 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
     // Can figure it out from knowing if we are in currently in check
     if (legalMoves == 0) bestScore = inCheck ? mated_in(sd->ply) : VALUE_DRAW;
     // Ensure the score falls within bounds
+    assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
+
+    // Store the score into the transposition table
+    table.save<nodeType>(key, depth, to_tt(bestScore, sd->ply), VALUE_ZERO, bestMove,
+                        (bestMove != Move::none() && pvNode) ? BOUND_EXACT : BOUND_UPPER);
+
+    // Return the best score
+    return bestScore;
+}
+
+template<NodeType nodeType>
+Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
+    // Ensure values are within bounds
+    assert(sd->ply >= 0 && sd->ply <= MAX_PLY);
+    assert(alpha >= -VALUE_INFINITE);
+    assert(beta <= VALUE_INFINITE);
+    assert(beta > alpha);
+
+    bool pvNode = nodeType == PV;
+    bool mainThread = sd->threadId == 0;
+
+    // Increment the nodes
+    sd->nodes++;
+
+    // Update seldepth
+    if (sd->ply + 1 > sd->selDepth) sd->selDepth = sd->ply + 1;
+
+    // Get all search info needed
+    bool  inCheck   = pos->checks();
+    Key   key       = pos->key();
+    Value bestScore = -VALUE_INFINITE;
+    Value score     = -VALUE_INFINITE;
+    Value standpat  = VALUE_NONE;
+    Value eval      = VALUE_NONE;
+    Move  bestMove  = Move::none();
+
+    // Check for a draw
+    if (sd->ply && pos->is_draw())
+        // Draw randomization based on node count
+        return 8 - (sd->nodes & 0xF);
+
+    // Check for max ply value and not in check, to return eval
+    if (sd->ply >= MAX_PLY)
+        return !inCheck ? Evaluate::evaluate(pos) : VALUE_DRAW;
+
+    standpat = Evaluate::evaluate(pos);
+
+    if (standpat >= beta)
+        return standpat;
+    if (standpat > alpha)
+        alpha = standpat;
+
+    GenerationMode mode = inCheck ? QSEARCH_CHECK : QSEARCH;
+
+    // Create a move generator for the position
+    Generator gen(pos, mode, Move::none());
+    Move m;
+
+    // Count the number of moves
+    int moveCnt = 0;
+
+    // Loop through all the moves
+    while ((m = gen.next()) != Move::none()) {
+        // Check the legality of the move
+        if (!pos->is_legal(m)) continue;
+
+        // Check if the move is a capture or not
+        bool isCapture = pos->is_capture(m);
+
+        // get the current see value for this move
+        Value see = gen.see_value();
+
+        // See pruning
+        if (isCapture && see < 0) continue;
+        if (isCapture && see + standpat > beta + 200) return beta;
+
+        // Increment the move counter
+        moveCnt++;
+
+        // Make the move
+        pos->do_move<true>(m);
+        // Increment the ply
+        sd->ply++;
+
+        // Recursive call to qsearch
+        score = -qsearch<nodeType>(pos, sd, -beta, -alpha);
+        // Ensure score falls within bounds
+        assert(score > -VALUE_INFINITE && score < VALUE_INFINITE);
+
+        // Undo the move
+        pos->undo_move(m);
+        // Decrement the ply
+        sd->ply--;
+
+        // Check for a new bestscore
+        if (score > bestScore) {
+            // Update the bestscore
+            bestScore = score;
+
+            // Check for beta cutoff
+            if (score >= beta)
+                return score;
+
+            if (score > alpha)
+                alpha = score;
+        }
+    }
+
+    // If there are no moves, just return a base evaluation
+    if (!moveCnt) bestScore = standpat;
+
     assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
 
     // Return the best score

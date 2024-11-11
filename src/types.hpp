@@ -73,6 +73,11 @@ enum Bound {
     BOUND_EXACT = BOUND_UPPER | BOUND_LOWER
 };
 
+enum NodeType {
+    NON_PV,
+    PV
+};
+
 enum Scoring {
     VALUE_ZERO = 0,
     VALUE_DRAW = 0,
@@ -83,7 +88,9 @@ enum Scoring {
     VALUE_MATE_IN_MAX_PLY = VALUE_MATE - MAX_PLY,
     VALUE_MATED_IN_MAX_PLY = -VALUE_MATE_IN_MAX_PLY,
     VALUE_WIN = VALUE_MATE_IN_MAX_PLY - 1,
-    VALUE_WIN_MAX_PLY = VALUE_WIN - MAX_PLY
+    VALUE_LOSS = -VALUE_WIN,
+    VALUE_WIN_MAX_PLY = VALUE_WIN - MAX_PLY,
+    VALUE_LOSS_MAX_PLY = VALUE_LOSS + MAX_PLY
 };
 
 enum PieceType {
@@ -262,7 +269,7 @@ ENABLE_INCREMENT_OPERATORS(CastlingRights)
 
 #undef ENABLE_INCREMENT_OPERATORS
 
-// Operator to add or subtract PhaseScores from values, this just defaults to the midgame value
+// Operator to add or subtract phase scores from values, this just defaults to the midgame value
 constexpr Value operator+(Value v, PhaseScore p) { return p.mid + v; }
 constexpr Value operator-(Value v, PhaseScore p) { return p.mid - v; }
 inline Value& operator+=(Value& v, PhaseScore p) { return v = v + p.mid; }
@@ -335,6 +342,19 @@ constexpr PhaseScore piece_value(Piece pc) {
 // Mating value functions
 constexpr Value mate_in(int ply) { return VALUE_MATE - ply; }
 constexpr Value mated_in(int ply) { return -VALUE_MATE + ply; }
+
+// Values to and and from transposition table
+constexpr Value from_tt(Value v, int ply) {
+    if (v == VALUE_NONE) return VALUE_NONE;
+    return v >= VALUE_WIN ? v - ply
+            : v <= VALUE_LOSS ? v + ply : v;
+}
+
+constexpr Value to_tt(Value v, int ply) {
+    if (v == VALUE_NONE) return VALUE_NONE;
+    return v >= VALUE_WIN ? v + ply
+            : v <= VALUE_LOSS ? v - ply : v;
+}
 
 }
 

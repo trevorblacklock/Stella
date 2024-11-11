@@ -728,6 +728,8 @@ void Position::undo_move(Move m) {
     // Check that there is at least 2 stored states
     assert(positionHistory.size() > 1);
 
+    --moveCount;
+
     // Change side to move
     change_side();
 
@@ -847,6 +849,84 @@ Value Position::game_phase() const {
         Value clamped = std::clamp(v, (Value)ENDGAME_CAP, (Value)MIDGAME_CAP);
         Value phase = ((clamped - ENDGAME_CAP) * 128) / (MIDGAME_CAP - ENDGAME_CAP);
         return phase;
+}
+
+Value Position::see(Move m) const {
+    // Check the move is not a special or invalid case
+    assert(m.is_ok());
+    if (m.type() != NORMAL) return 0;
+
+    // Get move information
+    Square from = m.from();
+    Square to = m.to();
+    PieceType ptFr = piece_type(piece_on(from));
+    PieceType ptTo = piece_type(piece_on(to));
+    Color us = side();
+
+    // Ensure move is a capture
+    if (ptTo == NO_PIECE_TYPE) return 0;
+
+    // Store recursive scores, maximum of 32 for max pieces on board
+    Value score[32];
+    Depth depth = 0;
+    score[0] = piece_value(ptTo).mid;
+
+    // Get bitboards and remove the current piece
+    Bitboard occupied = pieces() ^ from ^ to;
+    Bitboard rooks = pieces(ROOK);
+    Bitboard bishops = pieces(BISHOP);
+    Bitboard queens = pieces(QUEEN);
+
+    // Make horizontal and diagonal sliders
+    Bitboard horizontal = (rooks | queens) & ~square_bb(from);
+    Bitboard diagonal = (bishops | queens) & ~square_bb(from);
+
+    // Find attackers of the to square
+    Bitboard attacks = attackers(to, occupied);
+
+    // Loop through all captures until there are none left
+    while (true) {
+        // Increment the depth
+        depth++;
+        // Update the attack board and find active attackers
+        attacks &= occupied;
+        Bitboard active = attacks & pieces(us);
+
+        // If no active attackers then break the loop
+        if (!active) break;
+
+        // Now find the least valuable piece that can initiate the capture
+        PieceType pt;
+        for (pt = PAWN; pt <= KING; ++pt)
+            if (pieces(us, pt) & active) break;
+
+        // Adjust the score based on the move made
+        score[depth] = piece_value(ptFr).mid - score[depth - 1];
+
+        // Break early if double negative
+        if (std::max(-score[depth - 1], score[depth]) < 0) break;
+
+        // Update the piece
+        ptFr = pt;
+
+        // Now make the move on the occupied board and update the attacks
+        Square s = lsb(pieces(us, pt) & attacks);
+        occupied ^= s;
+
+        // Update the attacks
+        if (pt == PAWN || pt == BISHOP || pt == QUEEN)
+            attacks |= attacks_bb(to, BISHOP, occupied) & diagonal;
+        else if (pt == ROOK || pt == QUEEN)
+            attacks |= attacks_bb(to, ROOK, occupied) & horizontal;
+
+        // Change the side
+        us = ~us;
+    }
+
+    // Choose the best value to represent the chain of captures
+    while (--depth) score[depth - 1] = -std::max(-score[depth - 1], score[depth]);
+
+    return score[0];
 }
 
 }

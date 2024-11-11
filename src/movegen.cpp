@@ -13,6 +13,8 @@ Move Generator::next() {
         case TT_MOVE:
             // Increment the stage
             ++generationStage;
+            // Return the tt move so long as it is pseudo legal
+            if (pos->is_pseudolegal(ttMove)) return ttMove;
             [[fallthrough]];
 
         // Initialize the captures
@@ -25,8 +27,15 @@ Move Generator::next() {
 
         // Run through good captures
         case GOOD_CAPTURES:
-            // Placeholder until move ordering
-            if (captureIdx < captures.size) return next_best<CAPTURES>();
+            // Loop through all the good captures
+            if (captureIdx < goodCaptures) return next_best<CAPTURES>();
+            // If in qsearch mode exit
+            if (mode == QSEARCH) break;
+            // If in qsearch with checks move to evasions
+            if (mode == QSEARCH_CHECK) {
+                generationStage = INIT_EVASIONS;
+                next();
+            }
             // Increment the stage
             ++generationStage;
             [[fallthrough]];
@@ -49,6 +58,8 @@ Move Generator::next() {
 
         // Get the bad captures
         case BAD_CAPTURES:
+            // Loop through the rest of the captures
+            if (captureIdx < captures.size) return next_best<CAPTURES>();
             // Increment the stage
             ++generationStage;
             [[fallthrough]];
@@ -80,56 +91,29 @@ Move Generator::next() {
 }
 
 Generator::Generator(Position *p) {
-    this->init(p);
-}
-
-Generator::Generator(Position* p, int ply) {
-    this->init(p, ply);
-}
-
-void Generator::init(Position *p) {
     // Initialize the generator object
-    this->pos = p;
+    pos = p;
     side = pos->side();
-    // Assumption here is the type is legal moves
-    skipScoring = true;
-    // Clear old generation mask
-    mask = ALL_SQUARES;
-    // Clear old values that could mess up generation
-    skipQuiets    = false;
-    captures.size = 0;
-    quiets.size   = 0;
-    searched.size = 0;
-    goodCaptures  = 0;
-    goodQuiets    = 0;
-    captureIdx    = 0;
-    quietIdx      = 0;
-    searchedIdx   = 0;
+    // Set the generation stage
+    generationStage = TT_MOVE;
+    // Set the gen mode to perft
+    mode = PERFT;
     // Generate the mask
     generate_mask();
     // Generate all legal moves
     generate<LEGAL>();
 }
 
-void Generator::init(Position* p, int ply) {
+Generator::Generator(Position* p, GenerationMode m, Move tt) {
     // Initialize the generator object
-    this->pos = p;
+    pos = p;
     side = pos->side();
-    skipScoring = false;
-    // Clear old generation mask
-    mask = ALL_SQUARES;
     // Set the generation stage
     generationStage = TT_MOVE;
-    // Clear old values that could mess up generation
-    skipQuiets    = false;
-    captures.size = 0;
-    quiets.size   = 0;
-    searched.size = 0;
-    goodCaptures  = 0;
-    goodQuiets    = 0;
-    captureIdx    = 0;
-    quietIdx      = 0;
-    searchedIdx   = 0;
+    // Store the tt move
+    ttMove = tt;
+    // Set the generation mode
+    mode = m;
     // Generate the mask
     generate_mask();
 }
@@ -148,9 +132,27 @@ inline void Generator::generate_mask() {
 template<GenerationType T>
 inline Move Generator::next_best() {
     // If the type is a capture
-    if (T == CAPTURES) return captures.moves[captureIdx++];
+    if (T == CAPTURES) {
+        // Set current best to current move in the list
+        int best = captureIdx;
+        // Look through moves in the list beyond the current,
+        // and find the highest scoring one
+        for (int idx = captureIdx + 1; idx < captures.size; ++idx)
+            if (captures.scores[idx] > captures.scores[best]) best = idx;
+
+        // Replace best score with the current index, the old index will remain
+        // but is never looked at again
+        Move m = captures.moves[best];
+        see = seeScore[best];
+        seeScore[best] = seeScore[captureIdx];
+        captures.scores[best] = captures.scores[captureIdx];
+        captures.moves[best] = captures.moves[captureIdx++];
+        return m;
+    }
     // If the type is a quiet
-    if (T == QUIETS) return quiets.moves[quietIdx++];
+    if (T == QUIETS) {
+        return quiets.moves[quietIdx++];
+    }
     // For legal generation type return the next move immediately
     if (T == LEGAL) {
         if (captureIdx < captures.size) return captures.moves[captureIdx++];
@@ -171,16 +173,28 @@ inline void Generator::add_move(Move m) {
     assert(m.is_ok());
 
     // For legal generation type don't bother with scoring
-    if (skipScoring) {
+    if (mode == PERFT) {
         // Check the move is legal before adding it
         if (pos->is_legal(m)) {
             if (T == CAPTURES) captures.moves[captures.size++] = m;
             if (T == QUIETS || T == EVASIONS) quiets.moves[quiets.size++] = m;
         }
     }
-    else {
-        if (T == CAPTURES) captures.moves[captures.size++] = m;
-        if (T == QUIETS || T == EVASIONS) quiets.moves[quiets.size++] = m;
+    // First check that the move is not the tt move
+    else if (m != ttMove) {
+        if (T == CAPTURES) {
+            // Get the static exchange evaluation of this move
+            Value score = pos->see(m);
+            seeScore[captures.size] = score;
+            // If see is above 0, then consider it a good capture
+            if (score >= 0) goodCaptures++;
+            // Add this move to the captures list
+            captures.moves[captures.size++] = m;
+        }
+        else if (T == QUIETS || T == EVASIONS) {
+            // Add this move to the quiets list
+            quiets.moves[quiets.size++] = m;
+        }
     }
 }
 

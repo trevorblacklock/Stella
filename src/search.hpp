@@ -5,7 +5,7 @@
 #include "movegen.hpp"
 #include "misc.hpp"
 #include "timing.hpp"
-#include "hashtable.hpp"
+#include "tt.hpp"
 #include "history.hpp"
 #include "pv.hpp"
 
@@ -75,9 +75,16 @@ public:
     // Stop threads
     void stop();
 
-    // Search functions
-    Move search(Position *pos, TimeManager *manager, int id = 0);
-    Value alphabeta(Position *pos, SearchData *sd, Value alpha, Value beta, Depth depth);
+    // Main search function to launch threads
+    Move search(Position* pos, TimeManager *manager, int id = 0);
+
+    // Alpha beta pruning function, takes into account many heuristics to return an evaluation
+    template<NodeType nodeType>
+    Value alphabeta(Position* pos, SearchData *sd, Value alpha, Value beta, Depth depth);
+
+    // Qsearch function for evaluating a position taking into account the available captures
+    template<NodeType nodeType>
+    Value qsearch(Position* pos, SearchData* sd, Value alpha, Value beta);
 
     // Utilities for extracting data from all threads
     uint64_t total_nodes() const;

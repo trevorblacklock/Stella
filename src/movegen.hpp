@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "types.hpp"
+#include "bitboard.hpp"
 
 namespace Stella {
 
@@ -30,11 +31,18 @@ enum GenerationStage {
     ALL_EVASIONS
 };
 
+enum GenerationMode {
+    PV_SEARCH,
+    QSEARCH,
+    QSEARCH_CHECK,
+    PERFT
+};
+
 // Store the moves and scores in a movelist
 struct MoveList {
     Move     moves[MAX_MOVES];
     int      scores[MAX_MOVES];
-    uint16_t size;
+    uint16_t size = 0;
 };
 
 class Generator {
@@ -49,33 +57,37 @@ private:
     // in search will not need to recalculate the see score for a small time save.
     Value see;
     // Number of captures and quiets considered good
-    uint16_t goodCaptures;
-    uint16_t goodQuiets;
+    uint16_t goodCaptures = 0;
+    uint16_t goodQuiets = 0;
     // Indices for all three move lists
-    uint16_t captureIdx;
-    uint16_t quietIdx;
-    uint16_t searchedIdx;
+    uint16_t captureIdx = 0;
+    uint16_t quietIdx = 0;
+    uint16_t searchedIdx = 0;
     // Store the generation stage and if scoring should be skipped
-    uint8_t generationStage;
-    bool skipScoring;
+    uint8_t generationStage = TT_MOVE;
+    // Store the generation mode
+    GenerationMode mode;
     // Store the side to move
     Color side;
     // Store a pointer to the active position
     Position *pos;
+    // Store the passed move from the transposition table
+    Move ttMove;
     // Whether quiet generation should be skipped, relevant in certain
     // pruning techniques used in the main search.
-    bool skipQuiets;
+    bool skipQuiets = false;
     // A mask used for non-king move generation when in check. If in check the mask
     // will cover the squares between the attacker and king to only attempt generation
     // of moves that have the ability to block the check. This is done to speed up
     // generation and not waste time on moves that have no possibility of blocking the check.
     // This mask will be initialized whenever init() is called by using the passed position.
-    Bitboard mask;
+    Bitboard mask = ALL_SQUARES;
 
 public:
-    // Constructor for generator
+    // Constructor for generator in perft
     Generator(Position* p);
-    Generator(Position* p, int ply);
+    // Constsructor for generator used in search
+    Generator(Position* p, GenerationMode m, Move tt);
     // Initialize the move generator
     void init(Position* p);
     void init(Position* p, int ply);

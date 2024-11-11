@@ -5,7 +5,7 @@
 #include "movegen.hpp"
 #include "evaluate.hpp"
 #include "position.hpp"
-#include "hashtable.hpp"
+#include "tt.hpp"
 #include "misc.hpp"
 #include "search.hpp"
 #include "timing.hpp"
@@ -68,9 +68,17 @@ inline uint64_t get_val_from_key(std::string str, std::string key) {
     return (!val.empty() && is_number(val)) ? std::stoull(val) : 0;
 }
 
+static void exit_protocol() {
+    table.dealloc();
+}
+
 Uci::Uci() {
+    // Deallocate transposition table on exit
+    std::atexit(exit_protocol);
     // Set default threads
     s.set_threads(1);
+    // Set default transposition table size
+    table.resize(16);
 }
 
 Uci::~Uci() {
@@ -105,7 +113,7 @@ void Uci::uci() {
               << " by T. Blacklock"
               << std::endl
               << "option name Hash type spin default 16 min 1 max "
-              << 0
+              << table.max_size()
               << std::endl
               << "option name Threads type spin default 1 min 1 max "
               << std::thread::hardware_concurrency()
@@ -301,6 +309,10 @@ void Uci::parse_option(std::string opt, std::string val) {
     if (opt == "Threads") {
         numThreads = is_number(val) ? std::stoi(val) : 1;
     }
+    else if (opt == "Hash") {
+        size_t mb = is_number(val) ? std::stoi(val) : 16;
+        table.resize(mb);
+    }
 }
 
 void Uci::stop() {
@@ -311,6 +323,8 @@ void Uci::stop() {
 void Uci::quit() {
     // Stop the search
     stop();
+    // Deallocate the transposition table
+    table.dealloc();
 }
 
 void Uci::search() {
