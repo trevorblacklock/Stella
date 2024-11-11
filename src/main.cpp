@@ -1,15 +1,19 @@
 #include <iostream>
 
+#include "misc.hpp"
 #include "uci.hpp"
 #include "position.hpp"
 #include "bitboard.hpp"
-#include "perft.hpp"
+#include "evaluate.hpp"
+#include "movegen.hpp"
 
 using namespace Stella;
 
 int main(int argc, char* argv[]) {
-  Bitboards::init();
-  Position::init();
+    Bitboards::init();
+    Position::init();
+    Evaluate::init();
 
-  Uci(argc, argv);
+    Uci uci;
+    uci.loop(argc, argv);
 }

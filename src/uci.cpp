@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "bitboard.hpp"
 #include "movegen.hpp"
+#include "evaluate.hpp"
 #include "position.hpp"
 #include "hashtable.hpp"
 #include "misc.hpp"
@@ -55,7 +56,7 @@ inline T get_val_from_key(std::string str, std::string key) {
     // Retrieve the str value
     std::string val = find_val_from_key(str, key);
     // Return the casted result
-    return (!val.empty() && is_number(val)) ? static_cast<T>(std::stoi(val)) 
+    return (!val.empty() && is_number(val)) ? static_cast<T>(std::stoi(val))
                                                         : static_cast<T>(0);
 }
 
@@ -67,11 +68,9 @@ inline uint64_t get_val_from_key(std::string str, std::string key) {
     return (!val.empty() && is_number(val)) ? std::stoull(val) : 0;
 }
 
-Uci::Uci(int argc, char* argv[]) {
+Uci::Uci() {
     // Set default threads
     s.set_threads(1);
-    // Loop over arguments
-    loop(argc, argv);
 }
 
 Uci::~Uci() {
@@ -120,9 +119,9 @@ void Uci::uci() {
 void Uci::loop(int argc, char* argv[]) {
 
     // Send gui the engines information
-    std::cout << "Stella " 
+    std::cout << "Stella "
               << MAJOR_VERSION
-              << '.' 
+              << '.'
               << MINOR_VERSION
               << " by T. Blacklock"
               << std::endl;
@@ -169,6 +168,9 @@ void Uci::parse(std::string command) {
     }
     else if (token == "stop") {
         stop();
+    }
+    else if (token == "eval") {
+        std::cout << Evaluate::evaluate(&pos) << std::endl;
     }
     else if (token == "d") {
         std::cout << pos << std::endl;

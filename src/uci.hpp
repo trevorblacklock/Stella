@@ -13,13 +13,13 @@ class Uci {
 
 private:
     std::thread mainThread;
-    Search s = Search();
-    TimeManager tm = TimeManager();
+    Search s;
+    TimeManager tm;
     Position pos = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false);
     int numThreads = 1;
 
 public:
-    Uci(int argc, char* argv[]);
+    Uci();
     ~Uci();
 
     // Algebraic move notation to move

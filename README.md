@@ -25,7 +25,7 @@ setoption name Hash value 64
 ```
 
 ## Compiling
-Luna currently only supports builds for 64-bit Windows and Linux.
+Stella currently only supports builds for 64-bit Windows and Linux.
 
 The makefile is located in the `src` folder of the code, and it is recommended to run `make help`
 to see build targets and options that can be used.
