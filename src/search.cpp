@@ -353,7 +353,6 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
             if (score > alpha && score < beta)
                 score = -alphabeta<PV>(pos, sd, -beta, -alpha, newDepth);
         }
-
         // Ensure the score falls within bounds
         assert(score > -VALUE_INFINITE && score < VALUE_INFINITE);
 
@@ -418,6 +417,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     assert(beta > alpha);
 
     bool pvNode = nodeType == PV;
+    bool root = sd->ply == 0;
     bool mainThread = sd->threadId == 0;
 
     // Check for a force stop
@@ -441,6 +441,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     if (sd->ply + 1 > sd->selDepth) sd->selDepth = sd->ply + 1;
 
     // Get all search info needed
+    bool  found     = false;
     bool  inCheck   = pos->checks();
     Key   key       = pos->key();
     Value bestScore = -VALUE_INFINITE;
@@ -448,6 +449,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     Value standpat  = VALUE_NONE;
     Value eval      = VALUE_NONE;
     Move  bestMove  = Move::none();
+    Move  ttMove    = Move::none();
 
     // Check for a draw
     if (sd->ply && pos->is_draw())
@@ -457,6 +459,21 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     // Check for max ply value and not in check, to return eval
     if (sd->ply >= MAX_PLY)
         return !inCheck ? Evaluate::evaluate(pos) : VALUE_DRAW;
+
+    // Check for a transposition table entry
+    TTentry* entry = table.probe(key, found);
+    Value ttScore = found ? from_tt(entry->score(), sd->ply) : VALUE_NONE;
+
+    // Check if tt can be used for an early cutoff
+    if (found
+        && !pvNode
+        && entry->depth() >= inCheck
+        && ttScore != VALUE_NONE
+        && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER))) {
+
+        // So long as fifty move rule is not large, can return the score
+        if (pos->fifty_rule() < 90) return ttScore;
+    }
 
     standpat = Evaluate::evaluate(pos);
 
@@ -513,11 +530,10 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
             bestScore = score;
 
             // Check for beta cutoff
-            if (score >= beta)
-                return score;
-
-            if (score > alpha)
+            if (score < beta)
                 alpha = score;
+            else
+                break;
         }
     }
 
@@ -525,6 +541,11 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     if (!moveCnt) bestScore = standpat;
 
     assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
+
+    // If there is moves, store the best value in the transposition table.
+    // The depth is determined by if there is a beta cutoff and in check
+    table.save<nodeType>(key, 0, to_tt(bestScore, sd->ply), 0, bestMove,
+                        bestScore >= beta ? BOUND_LOWER : BOUND_UPPER);
 
     // Return the best score
     return bestScore;

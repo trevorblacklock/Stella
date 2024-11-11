@@ -22,8 +22,6 @@ void TTtable::save(Key key, Depth depth, Value score, Value eval, Move m, Bound 
     // Make sure scores are within bounds
     assert(score > -VALUE_INFINITE && score < VALUE_INFINITE);
     assert(eval > -VALUE_INFINITE && eval < VALUE_INFINITE);
-    // Make sure move exists
-    assert(m.is_ok());
     // Make sure bound exists
     assert(b != BOUND_NONE);
 

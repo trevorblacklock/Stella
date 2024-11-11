@@ -30,7 +30,10 @@ Move Generator::next() {
             // Loop through all the good captures
             if (captureIdx < goodCaptures) return next_best<CAPTURES>();
             // If in qsearch mode exit
-            if (mode == QSEARCH) break;
+            if (mode == QSEARCH) {
+                if (captureIdx < captures.size) return next_best<CAPTURES>();
+                break;
+            }
             // If in qsearch with checks move to evasions
             if (mode == QSEARCH_CHECK) {
                 generationStage = INIT_EVASIONS;

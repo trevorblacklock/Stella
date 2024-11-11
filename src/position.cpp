@@ -440,12 +440,18 @@ bool Position::is_pseudolegal(Move m) const {
     // If move has same from and to square then it is not possible
     if (!m.is_ok()) return false;
 
+    // If move is none, then cant be pseudo legal
+    if (m == Move::none()) return false;
+
     // Get the from and to square
     Square from = m.from();
     Square to = m.to();
 
     // Get the piece moved
     Piece pc = piece_moved(m);
+
+    // If piece moved is none, then return false
+    if (pc == NO_PIECE) return false;
 
     // Get the type of move
     MoveType type = m.type();
@@ -483,23 +489,27 @@ bool Position::is_pseudolegal(Move m) const {
     if (piece_type(pc) == PAWN) {
         // Check that non enpassant moves only move in a way a pawn can,
         if (type != EN_PASSANT) {
-        // Make sure the pawn lands on a legal square
-        if (!(to & ((from + pawn_push(us)) | (from + 2 * pawn_push(us)) | pawn_attacks(us, from)))) return false;
+            // Define pawn pushes
+            Square push = from + pawn_push(us);
+            Square doublePush = push + pawn_push(us);
 
-        // For single pawn pushes
-        if (to & (from + pawn_push(us)) && !is_empty(to)) return false;
+            // Make sure the pawn lands on a legal square
+            if (!((pawn_attacks(us, from) | push | doublePush) & to)) return false;
 
-        // For double pawn pushes
-        if (to & (from + 2 * pawn_push(us)) && !is_empty(from + pawn_push(us)) && !is_empty(to)) return false;
+            // For single pawn pushes
+            if (to & push && !is_empty(to)) return false;
 
-        // A double pawn push must land on the fourth rank and start on the second
-        if (to & (from + 2 * pawn_push(us)) && relative_rank(us, from) != RANK_2 && relative_rank(us, to) != RANK_4) return false;
+            // For double pawn pushes
+            if (to & doublePush && !is_empty(push) && !is_empty(to)) return false;
 
-        // Only allow captures if the pawn moves diagonally
-        if (captured != NO_PIECE && !(pawn_attacks(us, from) & to)) return false;
+            // A double pawn push must land on the fourth rank and start on the second
+            if (to & doublePush && relative_rank(us, from) != RANK_2 && relative_rank(us, to) != RANK_4) return false;
 
-        // Only allow diagonal movement if there is a capture
-        if ((pawn_attacks(us, from) & to) && captured == NO_PIECE) return false;
+            // Only allow captures if the pawn moves diagonally
+            if (captured != NO_PIECE && !(pawn_attacks(us, from) & to)) return false;
+
+            // Only allow diagonal movement if there is a capture
+            if ((pawn_attacks(us, from) & to) && captured == NO_PIECE) return false;
         }
 
         // Check that enpassant moves land on the correct square
@@ -517,7 +527,7 @@ bool Position::is_pseudolegal(Move m) const {
     // Check that other pieces move properly
     else {
         // Check that pieces land on possible squares
-        if (!(to & attacks_bb(from, piece_type(pc)))) return false;
+        if (!(attacks_bb(from, piece_type(pc)) & to)) return false;
 
         // Check that there are no pieces between the move for sliders
         if (piece_type(pc) != KNIGHT && piece_type(pc) != KING && (between_bb(from, to) ^ to) & pieces()) return false;
@@ -861,7 +871,7 @@ Value Position::see(Move m) const {
     Square to = m.to();
     PieceType ptFr = piece_type(piece_on(from));
     PieceType ptTo = piece_type(piece_on(to));
-    Color us = side();
+    Color us = ~side();
 
     // Ensure move is a capture
     if (ptTo == NO_PIECE_TYPE) return 0;

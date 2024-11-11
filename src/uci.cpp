@@ -68,13 +68,7 @@ inline uint64_t get_val_from_key(std::string str, std::string key) {
     return (!val.empty() && is_number(val)) ? std::stoull(val) : 0;
 }
 
-static void exit_protocol() {
-    table.dealloc();
-}
-
 Uci::Uci() {
-    // Deallocate transposition table on exit
-    std::atexit(exit_protocol);
     // Set default threads
     s.set_threads(1);
     // Set default transposition table size
@@ -184,6 +178,7 @@ void Uci::parse(std::string command) {
         std::cout << pos << std::endl;
     }
     else if (token == "exit" || token == "quit") {
+        stop();
         exit(0);
     }
 }

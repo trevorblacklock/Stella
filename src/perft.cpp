@@ -88,7 +88,7 @@ void Perft::worker(Position* pos, Depth depth) {
   while (!m_stop.load()) {
     // Check the root moves to ensure there is work to do
     Move m;
-    { 
+    {
         // Create a lock to access the deque
         std::unique_lock<std::mutex> lock(m_perft_mutex);
         // If the deque is empty, sub one worker and exit scope
@@ -117,7 +117,7 @@ void Perft::worker(Position* pos, Depth depth) {
 
     m_perft_one.notify_one();
   }
-  
+
   m_stop.store(true);
   m_num_workers.fetch_sub(1);
 }
