@@ -326,7 +326,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
         moveCnt++;
 
         // Send information about the current move if enough time has passed
-        if (root && mainThread && infoStrings && !sd->stop && tm->elapsed() > 3000) {
+        if (root && mainThread && infoStrings && !tm->forceStop && tm->elapsed() > 3000) {
             std::cout << "info depth "
                       << sd->rootDepth
                       << " currmove "
@@ -417,6 +417,20 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
 
     bool pvNode = nodeType == PV;
     bool mainThread = sd->threadId == 0;
+
+    // Check for a force stop
+    if (tm->forceStop) {
+        return beta;
+    }
+
+    // Check if time is out every 1024 nodes, if true then fail high
+    if (sd->nodes % 1024 == 0
+        && sd->threadId == 0
+        && !tm->can_continue()) {
+        // Stop the search and fail high
+        tm->stop();
+        return beta;
+    }
 
     // Increment the nodes
     sd->nodes++;
