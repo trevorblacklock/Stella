@@ -344,9 +344,9 @@ Bitboard Position::attackers(Square s, std::optional<Bitboard> occupied) const {
        | (attacks_bb(s, KING) & pieces(KING));
 }
 
-Bitboard Position::attacks_by(PieceType pt) const {
+Bitboard Position::attacks_by(PieceType pt, Color side) const {
     // Get the side to move
-    Color us = side();
+    Color us = side;
     // Create an attacker board
     Bitboard attackers = pieces(us, pt);
     // Check for piece being a pawn

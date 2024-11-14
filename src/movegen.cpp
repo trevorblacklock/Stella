@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "movegen.hpp"
+#include "history.hpp"
 #include "position.hpp"
 #include "misc.hpp"
 
@@ -131,30 +132,46 @@ inline void Generator::generate_mask() {
   else if (checkCount == 1) mask = between_bb(pos->ksq(side), lsb(pos->checks()));
 }
 
+// Helper function to probe a move list and find the highest score
+inline Move Generator::probe_list(MoveList& list, uint16_t& curr, int& best) {
+    // Set current best to current move in the list
+    best = curr;
+    // Look through moves in the list beyond the current,
+    // and find the highest scoring one
+    for (int idx = curr + 1; idx < list.size; ++idx)
+        if (list.scores[idx] > list.scores[best]) best = idx;
+
+    // Replace best score with the current index, the old index will remain
+    // but is never looked at again
+    Move m = list.moves[best];
+    list.scores[best] = list.scores[curr];
+    list.moves[best] = list.moves[curr++];
+    // Return the move
+    return m;
+}
+
 // Selects the next best move for a given generation type
 template<GenerationType T>
 inline Move Generator::next_best() {
     // If the type is a capture
     if (T == CAPTURES) {
-        // Set current best to current move in the list
-        int best = captureIdx;
-        // Look through moves in the list beyond the current,
-        // and find the highest scoring one
-        for (int idx = captureIdx + 1; idx < captures.size; ++idx)
-            if (captures.scores[idx] > captures.scores[best]) best = idx;
-
-        // Replace best score with the current index, the old index will remain
-        // but is never looked at again
-        Move m = captures.moves[best];
+        // Create int to hold best index
+        int best;
+        // Get the best move and it's index
+        Move m = probe_list(captures, captureIdx, best);
+        // Set the see scores using the best index
         see = seeScore[best];
-        seeScore[best] = seeScore[captureIdx];
-        captures.scores[best] = captures.scores[captureIdx];
-        captures.moves[best] = captures.moves[captureIdx++];
+        // Return the best move
         return m;
     }
     // If the type is a quiet
     if (T == QUIETS) {
-        return quiets.moves[quietIdx++];
+        // Create int to hold best index
+        int best;
+        // Get the best move and it's index
+        Move m = probe_list(quiets, quietIdx, best);
+        // Return the best move
+        return m;
     }
     // For legal generation type return the next move immediately
     if (T == LEGAL) {
@@ -190,12 +207,21 @@ inline void Generator::add_move(Move m) {
             Value score = pos->see(m);
             seeScore[captures.size] = score;
             // If see is above 0, then consider it a good capture
-            if (score >= 0) goodCaptures++;
+            if (score >= 0) {
+                goodCaptures++;
+                score += 100000;
+            }
+            // Otherwise its a bad one
+            else {
+                score += 1000;
+            }
             // Add this move to the captures list
+            captures.scores[captures.size] = score;
             captures.moves[captures.size++] = m;
         }
         else if (T == QUIETS || T == EVASIONS) {
             // Add this move to the quiets list
+            quiets.scores[quiets.size] = get_move_score(pos, m);
             quiets.moves[quiets.size++] = m;
         }
     }

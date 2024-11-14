@@ -282,7 +282,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
     Value ttScore = found ? from_tt(entry->score(), sd->ply) : VALUE_NONE;
 
     // Set the tt move
-    ttMove = root ? rootMoves[0].m : found ? entry->move() : Move::none();
+    ttMove = found ? entry->move() : Move::none();
 
     // Check if tt can be used for an early cutoff
     if (found
@@ -294,6 +294,11 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
         // So long as fifty move rule is not large, can return the score
         if (pos->fifty_rule() < 90) return ttScore;
     }
+
+    // Internal iterative deepening, when there is no tt move
+    // and at a pv node, decrease the depth by 2
+    if (depth >= 4 && pvNode && ttMove != Move::none())
+        depth -= 2;
 
     // Create move generator
     Generator gen(pos, PV_SEARCH, ttMove);
@@ -476,11 +481,6 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     }
 
     standpat = Evaluate::evaluate(pos);
-
-    if (standpat >= beta)
-        return standpat;
-    if (standpat > alpha)
-        alpha = standpat;
 
     GenerationMode mode = inCheck ? QSEARCH_CHECK : QSEARCH;
 

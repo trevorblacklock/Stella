@@ -121,7 +121,7 @@ inline Bitboard pawn_attacks(Color c, Square s) {
 
 // Return a bitboard of pawn attacks given the assumed bitboard of pawns
 inline Bitboard pawn_attacks_bb(Color c, Bitboard b) {
-    assert(b);
+    if (!b) return 0;
     return c == WHITE ? shift(b, NORTH_WEST) | shift(b, NORTH_EAST)
                     : shift(b, SOUTH_WEST) | shift(b, SOUTH_EAST);
 }

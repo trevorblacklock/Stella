@@ -123,6 +123,10 @@ private:
     void generate_pawns();
     // Generate a generation mask given the position
     void generate_mask();
+    // Helper for returning the best move in a move list,
+    // Removes the move from the list and indexes the passed index.
+    // Stores the index of the best move in best.
+    Move probe_list(MoveList& list, uint16_t& curr, int& best);
 };
 
 template<GenerationType T>

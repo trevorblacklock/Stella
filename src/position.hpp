@@ -167,7 +167,7 @@ public:
     Bitboard attackers(Square s, std::optional<Bitboard> occupied = std::nullopt) const;
 
     // Return a bitboard for attacks by a piecetype from the opponent
-    Bitboard attacks_by(PieceType pt) const;
+    Bitboard attacks_by(PieceType pt, Color side) const;
 
     // Get the gamephase score of the current position
     Value game_phase() const;
