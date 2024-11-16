@@ -52,8 +52,8 @@ bool TimeManager::can_continue() {
     // Get the elapsed time
     uint64_t time = elapsed();
     // Check if the time exceeds the limit
-    if (moveTimeLimit.enabled && time > moveTimeLimit.max) return false;
-    if (timeLimit.enabled && time > timeLimit.max) return false;
+    if (moveTimeLimit.enabled && time >= moveTimeLimit.max) return false;
+    if (timeLimit.enabled && time >= timeLimit.max) return false;
 
     // Return true by default
     return true;
