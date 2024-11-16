@@ -708,7 +708,7 @@ void Position::do_move(Move m) {
     update();
 
     // Ensure reptition is false
-    current->repetition = false;
+    current->repetition = 0;
     // Check how far can go back
     size_t inc = std::min(current->fiftyRule, current->pliesFromNull);
     // Only update repetitions if inc is large enough
@@ -719,7 +719,7 @@ void Position::do_move(Move m) {
         // Loop through possible repeating positions, don't bother if fifty rule is small enough
         for (size_t idx = start; idx >= end; idx += 2) {
             if (positionHistory.at(idx).key == current->key) {
-                current->repetition = true;
+                ++current->repetition;
                 break;
             }
         }
@@ -836,7 +836,7 @@ bool Position::is_draw() const {
     if (current->fiftyRule > 99 && !current->checks) return true;
 
     // Return a draw if a position repeats once earlier
-    return current->repetition;
+    return current->repetition >= 2;
 }
 
 Value Position::game_phase() const {

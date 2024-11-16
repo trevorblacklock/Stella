@@ -273,7 +273,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
     // Mate distance pruning
     if (sd->ply) {
         alpha = std::max(mated_in(sd->ply), alpha);
-        beta = std::max(mate_in(sd->ply + 1), beta);
+        beta = std::min(mate_in(sd->ply + 1), beta);
         if (alpha >= beta) return alpha;
     }
 
@@ -294,11 +294,6 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
         // So long as fifty move rule is not large, can return the score
         if (pos->fifty_rule() < 90) return ttScore;
     }
-
-    // Internal iterative deepening, when there is no tt move
-    // and at a pv node, decrease the depth by 2
-    if (depth >= 4 && pvNode && ttMove != Move::none())
-        depth -= 2;
 
     // Create move generator
     Generator gen(pos, PV_SEARCH, ttMove);

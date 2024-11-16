@@ -16,7 +16,7 @@ struct PositionInfo {
     int       castlingRights = 0;
     int       fiftyRule = 0;
     int       pliesFromNull = 0;
-    bool      repetition = false;
+    int      repetition = 0;
     Piece     capturedPiece = NO_PIECE;
     Square    epSquare = SQ_NONE;
     Bitboard  checks = 0;

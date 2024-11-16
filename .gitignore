@@ -17,3 +17,7 @@ bin
 # VS Code #
 ###################
 .vscode
+
+# Test Directory #
+###################
+tests
