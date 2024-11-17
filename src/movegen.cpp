@@ -86,6 +86,7 @@ Move Generator::next() {
         case ALL_EVASIONS:
             // Return the next evasion move which is stored as a quiet
             if (quietIdx < quiets.size) return next_best<QUIETS>();
+            if (captureIdx < captures.size) return next_best<CAPTURES>();
             // Break out of loop once all evasions are searched
             break;
     }
@@ -386,28 +387,28 @@ inline void Generator::generate_piece(PieceType pt) {
 
         // Loop through king attacks and add the moves
         while (attacks) {
-        to = pop_lsb(attacks);
-        add_move<T>(Move(from, to));
+            to = pop_lsb(attacks);
+            add_move<T>(Move(from, to));
         }
 
         // Generate all castling moves, making sure there are no checks
         if (T == QUIETS && !pos->checks()) {
-        // Find the rights for the side to move
-        CastlingRights kingRights = us == WHITE ? WHITE_KING : BLACK_KING;
-        CastlingRights queenRights = us == WHITE ? WHITE_QUEEN : BLACK_QUEEN;
+            // Find the rights for the side to move
+            CastlingRights kingRights = us == WHITE ? WHITE_KING : BLACK_KING;
+            CastlingRights queenRights = us == WHITE ? WHITE_QUEEN : BLACK_QUEEN;
 
-        // Now determine if castling is possible on kingside
-        if (pos->can_castle(kingRights) && !pos->castling_blocked(kingRights))
-            add_move<QUIETS>(Move(from, pos->castle_rook_square(kingRights), CASTLING));
+            // Now determine if castling is possible on kingside
+            if (pos->can_castle(kingRights) && !pos->castling_blocked(kingRights))
+                add_move<QUIETS>(Move(from, pos->castle_rook_square(kingRights), CASTLING));
 
-        // Now determine if castling is possible on queenside
-        if (pos->can_castle(queenRights) && !pos->castling_blocked(queenRights))
-            add_move<QUIETS>(Move(from, pos->castle_rook_square(queenRights), CASTLING));
-        }
+            // Now determine if castling is possible on queenside
+            if (pos->can_castle(queenRights) && !pos->castling_blocked(queenRights))
+                add_move<QUIETS>(Move(from, pos->castle_rook_square(queenRights), CASTLING));
+            }
 
-    // Return once finished with king moves to not generate other moves on accident
-    return;
-  }
+        // Return once finished with king moves to not generate other moves on accident
+        return;
+    }
 
     // Create a mask for the pieces
     Bitboard pieceMask = mask;
@@ -440,7 +441,8 @@ inline void Generator::generate() {
         generate<QUIETS>();
     }
     else if (T == EVASIONS) {
-        generate_piece<T>(KING);
+        generate<CAPTURES>();
+        generate<QUIETS>();
     }
     else if (T == CAPTURES || T == QUIETS) {
         generate_pawns<T>();

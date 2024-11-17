@@ -471,11 +471,13 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
         && ttScore != VALUE_NONE
         && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER))) {
 
-        // So long as fifty move rule is not large, can return the score
-        if (pos->fifty_rule() < 90) return ttScore;
+        // Return the score
+        return ttScore;
     }
 
-    standpat = Evaluate::evaluate(pos);
+    bestScore = standpat = Evaluate::evaluate(pos);
+
+    if (standpat >= beta) return standpat;
 
     GenerationMode mode = inCheck ? QSEARCH_CHECK : QSEARCH;
 
@@ -497,12 +499,12 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
         // get the current see value for this move
         Value see = gen.see_value();
 
+        // Increment the move counter
+        moveCnt++;
+
         // See pruning
         if (isCapture && see < 0) continue;
         if (isCapture && see + standpat > beta + 200) return beta;
-
-        // Increment the move counter
-        moveCnt++;
 
         // Make the move
         pos->do_move<true>(m);
@@ -523,6 +525,10 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
         if (score > bestScore) {
             // Update the bestscore
             bestScore = score;
+            bestMove = m;
+
+            if (!pvNode && mainThread && !tm->forceStop)
+                sd->pvTable.update(m, sd->ply);
 
             // Check for beta cutoff
             if (score < beta)
@@ -533,7 +539,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     }
 
     // If there are no moves, just return a base evaluation
-    if (!moveCnt) bestScore = standpat;
+    if (inCheck && !moveCnt) return mated_in(sd->ply);
 
     assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
 
