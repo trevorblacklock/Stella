@@ -10,7 +10,7 @@ struct History {
     int test;
 };
 
-const inline Value get_move_score(Position* pos, Move m) {
+inline Value get_move_score(Position* pos, Move m) {
     assert(m != Move::none());
     assert(m.is_ok());
 

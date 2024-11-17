@@ -24,12 +24,12 @@ MINOR = 0
 # 1.3 Source code directory and files
 ROOT := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 SRCS := bitboard.cpp tt.cpp history.cpp main.cpp misc.cpp movegen.cpp \
-		evaluate.cpp position.cpp pv.cpp search.cpp timing.cpp uci.cpp \
-		perft.cpp
+		position.cpp pv.cpp search.cpp timing.cpp uci.cpp perft.cpp \
+		nn/layers.cpp nn/accumulator.cpp nn/evaluate.cpp
 OBJS := $(SRCS:.cpp=.o)
 
 # Default neural network naming
-NET_FILE := $(ROOT)/Stella-00000000.nn
+EVALFILE := $(ROOT)/net-00000000.nn
 
 #--------------------------------------------------------------------------------#
 # 2. CONFIGURATION                                                               #
@@ -68,7 +68,7 @@ avx512 = no
 # Currently only supporting g++
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wcast-qual -fno-exceptions -pedantic -Wextra -Wshadow -Wmissing-declarations \
-					 -DMINOR_VERSION=$(MINOR) -DMAJOR_VERSION=$(MAJOR) -DNET_FILE=\"$(NET_FILE)\" \
+					 -DMINOR_VERSION=$(MINOR) -DMAJOR_VERSION=$(MAJOR) -DEVALFILE=\"$(EVALFILE)\" \
 					 -lpthread -static $(EXTRA_FLAGS)
 
 # 2.3 Flags for compiling with PGO enabled

@@ -2,6 +2,7 @@
 #include "misc.hpp"
 
 #include <thread>
+#include <iostream>
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
@@ -102,7 +103,7 @@ void Perft::worker(Position* pos, Depth depth) {
     // Using the move generate a position from the
     // existing one passed to the worker funciton
     Position newPos = *pos;
-    newPos.do_move<false>(m);
+    newPos.do_move<false, false>(m);
 
     // Run the perft search adding an extra node to account
     // for the root move made just above.
@@ -140,13 +141,13 @@ uint64_t Perft::perft(Position* pos, Depth depth) {
     // Loop through every legal move
     while ((m = gen.next_best<LEGAL>()) != Move::none()) {
         // Make the move
-        pos->do_move<false>(m);
+        pos->do_move<false, false>(m);
         // If the depth is two can count all root moves from the next position, otherwise recursively call perft
         cnt = leaf ? Generator(pos).count<LEGAL>() : perft(pos, depth - 1);
         // Count the nodes
         nodes += cnt;
         // Undo the move
-        pos->undo_move(m);
+        pos->undo_move<false>(m);
     }
     // Return the total node count
     return nodes;

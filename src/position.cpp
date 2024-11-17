@@ -102,14 +102,15 @@ Position::Position(const std::string& fen, bool chess960) {
         // Check if the token is a slash for new rank
         else if (token == '/') s += SOUTH_SOUTH;
         // Check for token identifying a piece to place
-        else if ((pc = Piece(pieceChar.find(token))) != std::string::npos) {
-        // For each set piece adjust the hash key
-        current->key ^= Zobrist::pieces[pc][s];
-        set_piece(pc, s);
-        ++s;
-        // Also add the value of the piece if it is not a pawn or king
-        if (piece_type(pc) != PAWN && piece_type(pc) != KING)
-            current->nonPawnMaterial[piece_color(pc)] += piece_value(pc);
+        else if (pieceChar.find(token) != std::string::npos) {
+            pc = Piece(pieceChar.find(token));
+            // For each set piece adjust the hash key
+            current->key ^= Zobrist::pieces[pc][s];
+            set_piece(pc, s);
+            ++s;
+            // Also add the value of the piece if it is not a pawn or king
+            if (piece_type(pc) != PAWN && piece_type(pc) != KING)
+                current->nonPawnMaterial[piece_color(pc)] += piece_value(pc);
         }
   }
 
@@ -171,6 +172,9 @@ Position::Position(const std::string& fen, bool chess960) {
     // Set if position is Chess960
     this->isChess960 = chess960;
 
+    // Reset the accumulator histories
+    network.reset(this);
+
     // Finally update the game state
     this->update();
 }
@@ -199,6 +203,9 @@ Position& Position::operator=(const Position& pos) {
         this->positionHistory.push_back(entry);
 
     this->current = &this->positionHistory.back();
+
+    // Reset the accumulator
+    network.reset(this);
 
     // Update the state info
     this->update();
@@ -493,6 +500,9 @@ bool Position::is_pseudolegal(Move m) const {
             Square push = from + pawn_push(us);
             Square doublePush = push + pawn_push(us);
 
+            // Set the double push to zero if on the second to final relative rank
+            if (relative_rank(us, from) == RANK_7) doublePush = static_cast<Square>(0);
+
             // Make sure the pawn lands on a legal square
             if (!((pawn_attacks(us, from) | push | doublePush) & to)) return false;
 
@@ -536,7 +546,7 @@ bool Position::is_pseudolegal(Move m) const {
     return true;
 }
 
-template<bool prefetch>
+template<bool prefetch, bool lazy>
 void Position::do_move(Move m) {
     // Assert move is ok
     assert(m.is_ok());
@@ -609,8 +619,8 @@ void Position::do_move(Move m) {
         current->key ^= Zobrist::pieces[pc][kingFrom] ^ Zobrist::pieces[pc][kingTo]
                     ^ Zobrist::pieces[piece_on(to)][rookFrom] ^ Zobrist::pieces[piece_on(to)][rookTo];
 
-        // Set the captured piece to none
-        captured = NO_PIECE;
+        // Set the captured piece to the castling rook
+        captured = us == WHITE ? W_ROOK : B_ROOK;
 
         // Update the castling rights and zobrist key, first remove old castling rights
         current->key ^= Zobrist::castling[current->castlingRights];
@@ -621,7 +631,7 @@ void Position::do_move(Move m) {
     }
 
     // Now deal with captures, this includes enpassant moves
-    if (captured != NO_PIECE) {
+    else if (captured != NO_PIECE) {
         // Get the capture square
         Square captureSq = to;
 
@@ -699,13 +709,16 @@ void Position::do_move(Move m) {
     }
 
     // Set the captured piece
-    current->capturedPiece = captured;
+    current->capturedPiece = type == CASTLING ? NO_PIECE : captured;
 
     // Change the side to move
     change_side();
 
     // Update state information
     update();
+
+    // Update the accumulator
+    if (lazy) network.update_history<false>(this, m, pc, captured);
 
     // Ensure reptition is false
     current->repetition = 0;
@@ -728,9 +741,12 @@ void Position::do_move(Move m) {
 }
 
 // Instantiate the templates
-template void Position::do_move<true>(Move m);
-template void Position::do_move<false>(Move m);
+template void Position::do_move<true, true>(Move m);
+template void Position::do_move<true, false>(Move m);
+template void Position::do_move<false, true>(Move m);
+template void Position::do_move<false, false>(Move m);
 
+template<bool lazy>
 void Position::undo_move(Move m) {
     // Check that the move is ok
     assert(m.is_ok());
@@ -825,10 +841,16 @@ void Position::undo_move(Move m) {
         }
     }
 
+    // Pop back the accumulator history
+    if (lazy) network.update_history<true>(this, m, NO_PIECE, NO_PIECE);
+
     // Remove the state and adjust the current pointer
     current = &positionHistory.end()[-2];
     positionHistory.pop_back();
 }
+
+template void Position::undo_move<true>(Move m);
+template void Position::undo_move<false>(Move m);
 
 // Tests if a position draws by repetition or by 50-move rule
 bool Position::is_draw() const {
@@ -937,6 +959,31 @@ Value Position::see(Move m) const {
     while (--depth) score[depth - 1] = -std::max(-score[depth - 1], score[depth]);
 
     return score[0];
+}
+
+// Phase values to use when calculating tapered eval from network
+constexpr float phaseValues[PIECE_TYPE_NB] {
+    0, 0.552938, 1.55294, 1.50862, 2.64379, 4.0, 0, 0
+};
+
+constexpr float eval_mg_scale = 1.5;
+constexpr float eval_eg_scale = 1.15;
+constexpr float phase_sum = 39.6684;
+
+Value Position::evaluate() {
+    // Get the score from the network
+    Value score = network.propagate(side());
+
+    // Calculate the phase
+    float phase = (phase_sum
+                  - phaseValues[PAWN] * popcount(pieces(PAWN))
+                  - phaseValues[KNIGHT] * popcount(pieces(KNIGHT))
+                  - phaseValues[BISHOP] * popcount(pieces(BISHOP))
+                  - phaseValues[ROOK] * popcount(pieces(ROOK))
+                  - phaseValues[QUEEN] * popcount(pieces(QUEEN))) / phase_sum;
+
+    // Return the scaled eval
+    return std::clamp(static_cast<Value>((eval_mg_scale - phase * (eval_mg_scale - eval_eg_scale)) * score), VALUE_LOSS_MAX_PLY + 1, VALUE_WIN_MAX_PLY - 1);
 }
 
 }

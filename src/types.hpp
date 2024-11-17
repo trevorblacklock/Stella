@@ -344,16 +344,44 @@ constexpr Value mate_in(int ply) { return VALUE_MATE - ply; }
 constexpr Value mated_in(int ply) { return -VALUE_MATE + ply; }
 
 // Values to and and from transposition table
-constexpr Value from_tt(Value v, int ply) {
+constexpr Value value_from_tt(Value v, int ply, int fifty) {
     if (v == VALUE_NONE) return VALUE_NONE;
-    return v >= VALUE_WIN ? v - ply
-            : v <= VALUE_LOSS ? v + ply : v;
+    // Handle winning values
+    if (v >= VALUE_WIN_MAX_PLY) {
+        // Check for a potentially wrong mate score
+        if (v >= VALUE_MATE_IN_MAX_PLY && VALUE_MATE - v > 100 - fifty)
+            return VALUE_WIN_MAX_PLY - 1;
+
+        // Check for a potentially wrong winning score
+        if (VALUE_WIN - v > 100 - fifty)
+            return VALUE_WIN_MAX_PLY - 1;
+
+        // Return normally
+        return v - ply;
+    }
+
+    // Handle losing values
+    if (v <= VALUE_LOSS_MAX_PLY) {
+        // Check for a potentially wrong mate score
+        if (v <= VALUE_MATED_IN_MAX_PLY && VALUE_MATE + v > 100 - fifty)
+            return VALUE_LOSS_MAX_PLY + 1;
+
+        // Check for a potentially wrong winning score
+        if (VALUE_WIN + v > 100 - fifty)
+            return VALUE_LOSS_MAX_PLY + 1;
+
+        // Return normally
+        return v + ply;
+    }
+
+    // Return score if not a winning/losing score
+    return v;
 }
 
-constexpr Value to_tt(Value v, int ply) {
-    if (v == VALUE_NONE) return VALUE_NONE;
-    return v >= VALUE_WIN ? v + ply
-            : v <= VALUE_LOSS ? v - ply : v;
+constexpr Value value_to_tt(Value v, int ply) {
+    assert(v != VALUE_NONE);
+    return v >= VALUE_WIN_MAX_PLY ? v + ply
+            : v <= VALUE_LOSS_MAX_PLY ? v - ply : v;
 }
 
 }

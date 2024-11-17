@@ -1,5 +1,4 @@
 #include <cstring>
-#include <iostream>
 
 #include "tt.hpp"
 #include "types.hpp"
@@ -21,7 +20,6 @@ void TTtable::save(Key key, Depth depth, Value score, Value eval, Move m, Bound 
     assert(depth >= 0 && depth <= MAX_PLY);
     // Make sure scores are within bounds
     assert(score > -VALUE_INFINITE && score < VALUE_INFINITE);
-    assert(eval > -VALUE_INFINITE && eval < VALUE_INFINITE);
     // Make sure bound exists
     assert(b != BOUND_NONE);
 

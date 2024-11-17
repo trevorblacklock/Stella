@@ -2,7 +2,6 @@
 #define BITBOARD_H_INCLUDED
 
 #include <string>
-#include <iostream>
 
 #include "types.hpp"
 
@@ -105,6 +104,7 @@ inline bool lies_along(Square s1, Square s2, Square s3) {
 
 // Function that shifts the bitboard by a cardinal direction
 constexpr Bitboard shift(Bitboard b, Direction d) {
+    if (b == 0) return 0;
     return d == NORTH      ? b << NORTH                     : d == NORTH_NORTH ? b << NORTH_NORTH
         : d == SOUTH      ? b >> -SOUTH                    : d == SOUTH_SOUTH ? b >> -SOUTH_SOUTH
         : d == EAST       ? (b & ~FILE_HBB) << EAST        : d == WEST        ? (b & ~FILE_ABB) >> -WEST
@@ -121,7 +121,6 @@ inline Bitboard pawn_attacks(Color c, Square s) {
 
 // Return a bitboard of pawn attacks given the assumed bitboard of pawns
 inline Bitboard pawn_attacks_bb(Color c, Bitboard b) {
-    if (!b) return 0;
     return c == WHITE ? shift(b, NORTH_WEST) | shift(b, NORTH_EAST)
                     : shift(b, SOUTH_WEST) | shift(b, SOUTH_EAST);
 }

@@ -1,12 +1,11 @@
 #include "search.hpp"
 #include "position.hpp"
-#include "bitboard.hpp"
-#include "evaluate.hpp"
 #include "types.hpp"
 #include "movegen.hpp"
 
 #include <thread>
 #include <cmath>
+#include <iostream>
 
 namespace Stella {
 
@@ -268,7 +267,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
 
     // Check for max ply value and not in check, to return eval
     if (sd->ply >= MAX_PLY)
-        return !inCheck ? Evaluate::evaluate(pos) : VALUE_DRAW;
+        return !inCheck ? pos->evaluate() : VALUE_DRAW;
 
     // Mate distance pruning
     if (sd->ply) {
@@ -279,7 +278,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
 
     // Check for a transposition table entry
     TTentry* entry = table.probe(key, found);
-    Value ttScore = found ? from_tt(entry->score(), sd->ply) : VALUE_NONE;
+    Value ttScore = found ? value_from_tt(entry->score(), sd->ply, pos->fifty_rule()) : VALUE_NONE;
 
     // Set the tt move
     ttMove = found ? entry->move() : Move::none();
@@ -293,6 +292,27 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
 
         // So long as fifty move rule is not large, can return the score
         if (pos->fifty_rule() < 90) return ttScore;
+    }
+
+    // Set standpat to a mate value for checks
+    if (inCheck) {
+        standpat = eval = -VALUE_MATE + sd->ply;
+    }
+    // For found transposition entries, try to find the standpat from there.
+    else if (found) {
+        standpat = eval = entry->eval();
+        // For values of none, run an evaluate
+        if (eval == VALUE_NONE)
+            standpat = eval = pos->evaluate();
+        // If the transposition table has a score we can use that for standpat
+        if (ttScore != VALUE_NONE
+            && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER)))
+            // Set the eval only, not standpat
+            eval = ttScore;
+    }
+    // If no entry is found just evaluate normally
+    else {
+        standpat = eval = pos->evaluate();
     }
 
     // Create move generator
@@ -383,7 +403,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
             // Check for a beta cutoff
             if (score >= beta) {
                 // Store the result in the transposition table
-                table.save<nodeType>(key, depth, to_tt(score, sd->ply), VALUE_ZERO, m, BOUND_LOWER);
+                table.save<nodeType>(key, depth, value_to_tt(score, sd->ply), standpat, m, BOUND_LOWER);
                 // Return the score
                 return score;
             }
@@ -401,7 +421,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
     assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
 
     // Store the score into the transposition table
-    table.save<nodeType>(key, depth, to_tt(bestScore, sd->ply), VALUE_ZERO, bestMove,
+    table.save<nodeType>(key, depth, value_to_tt(bestScore, sd->ply), standpat, bestMove,
                         (bestMove != Move::none() && pvNode) ? BOUND_EXACT : BOUND_UPPER);
 
     // Return the best score
@@ -419,6 +439,8 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     bool pvNode = nodeType == PV;
     bool root = sd->ply == 0;
     bool mainThread = sd->threadId == 0;
+
+    Color us = pos->side();
 
     // Check for a force stop
     if (tm->forceStop) {
@@ -447,7 +469,6 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     Value bestScore = -VALUE_INFINITE;
     Value score     = -VALUE_INFINITE;
     Value standpat  = VALUE_NONE;
-    Value eval      = VALUE_NONE;
     Move  bestMove  = Move::none();
     Move  ttMove    = Move::none();
 
@@ -458,11 +479,11 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
 
     // Check for max ply value and not in check, to return eval
     if (sd->ply >= MAX_PLY)
-        return !inCheck ? Evaluate::evaluate(pos) : VALUE_DRAW;
+        return !inCheck ? pos->evaluate() : VALUE_DRAW;
 
     // Check for a transposition table entry
     TTentry* entry = table.probe(key, found);
-    Value ttScore = found ? from_tt(entry->score(), sd->ply) : VALUE_NONE;
+    Value ttScore = found ? value_from_tt(entry->score(), sd->ply, pos->fifty_rule()) : VALUE_NONE;
 
     // Check if tt can be used for an early cutoff
     if (found
@@ -475,17 +496,46 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
         return ttScore;
     }
 
-    bestScore = standpat = Evaluate::evaluate(pos);
+    // Set standpat and bestscore to a mate value for checks
+    if (inCheck) {
+        bestScore = -VALUE_INFINITE;
+    }
+    else {
+        // For found transposition entries, try to find the standpat from there.
+        if (found) {
+            standpat = bestScore = entry->eval();
+            // For values of none, run an evaluate
+            if (std::abs(bestScore) >= VALUE_WIN_MAX_PLY)
+                standpat = bestScore = pos->evaluate();
+            // If the transposition table has a score we can use that for standpat
+            if (ttScore != VALUE_NONE
+                && std::abs(ttScore) < VALUE_WIN_MAX_PLY
+                && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER)))
+                // Set the eval only, not standpat
+                bestScore = ttScore;
+        }
+        // If no entry is found just evaluate normally
+        else {
+            standpat = bestScore = pos->evaluate();
+        }
 
-    if (standpat >= beta) return standpat;
+        // Check for an early cutoff
+        if (bestScore >= beta) {
+            // Return the score now
+            return bestScore;
+        }
+
+        // Check for a fail high
+        if (bestScore > alpha) {
+            alpha = bestScore;
+        }
+    }
 
     GenerationMode mode = inCheck ? QSEARCH_CHECK : QSEARCH;
 
     // Create a move generator for the position
     Generator gen(pos, mode, Move::none());
     Move m;
-
-    // Count the number of moves
     int moveCnt = 0;
 
     // Loop through all the moves
@@ -499,12 +549,12 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
         // get the current see value for this move
         Value see = gen.see_value();
 
-        // Increment the move counter
-        moveCnt++;
+        // Pruning for current position
+        if (bestScore > VALUE_LOSS_MAX_PLY && pos->non_pawn_material(us)) {
+            if (isCapture && see < 0) continue;
+        }
 
-        // See pruning
-        if (isCapture && see < 0) continue;
-        if (isCapture && see + standpat > beta + 200) return beta;
+        moveCnt++;
 
         // Make the move
         pos->do_move<true>(m);
@@ -539,14 +589,19 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     }
 
     // If there are no moves, just return a base evaluation
-    if (inCheck && !moveCnt) return mated_in(sd->ply);
+    if (inCheck && bestScore == -VALUE_INFINITE) {
+        assert(!moveCnt);
+        assert(!Generator(pos).count<LEGAL>());
+        return mated_in(sd->ply);
+    }
 
     assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
 
     // If there is moves, store the best value in the transposition table.
-    // The depth is determined by if there is a beta cutoff and in check
-    table.save<nodeType>(key, 0, to_tt(bestScore, sd->ply), 0, bestMove,
-                        bestScore >= beta ? BOUND_LOWER : BOUND_UPPER);
+    // The depth is determined by if there is a beta cutoff and in check.
+    if (moveCnt)
+        table.save<nodeType>(key, 0, value_to_tt(bestScore, sd->ply), standpat, bestMove,
+                            bestScore >= beta ? BOUND_LOWER : BOUND_UPPER);
 
     // Return the best score
     return bestScore;

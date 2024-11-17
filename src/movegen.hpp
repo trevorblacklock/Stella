@@ -1,8 +1,6 @@
 #ifndef MOVEGEN_H_INCLUDED
 #define MOVEGEN_H_INCLUDED
 
-#include <algorithm>
-
 #include "types.hpp"
 #include "bitboard.hpp"
 

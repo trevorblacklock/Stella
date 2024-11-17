@@ -6,6 +6,7 @@
 
 #include "bitboard.hpp"
 #include "types.hpp"
+#include "nn/evaluate.hpp"
 
 namespace Stella {
 
@@ -51,6 +52,9 @@ private:
     // Also store a pointer to the current position
     PositionInfo* current;
 
+    // Store the evaluator
+    Network::Evaluator network;
+
     // Updates the position for checks, pins and blockers
     void update();
 
@@ -60,6 +64,9 @@ private:
 public:
     // Initialialize the position
     static void init();
+
+    // Evaluate the position using the neural net
+    Value evaluate();
 
     // Constructors using FEN "Forsyth–Edwards Notation",
     // if Chess960 is used then Shredder-FEN or X-FEN will be used over standard FEN.
@@ -134,10 +141,11 @@ public:
     Key           previous_key(int count) const;
 
     // Make a move on the board
-    template<bool prefetch>
+    template<bool prefetch, bool lazy=true>
     void do_move(Move m);
 
     // Undo a move which is assumed to be the previous move resulting in this position.
+    template<bool lazy=true>
     void undo_move(Move m);
 
     // Do or undo a null move which is used in search.

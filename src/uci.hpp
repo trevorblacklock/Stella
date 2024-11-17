@@ -4,6 +4,7 @@
 #include "position.hpp"
 #include "search.hpp"
 #include "timing.hpp"
+#include "nn/evaluate.hpp"
 
 #include <string>
 
@@ -16,6 +17,7 @@ private:
     Search s;
     TimeManager tm;
     Position pos = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false);
+    Network::Evaluator network;
     int numThreads = 1;
 
 public:

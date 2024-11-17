@@ -28,18 +28,13 @@ Move Generator::next() {
 
         // Run through good captures
         case GOOD_CAPTURES:
-            // Loop through all the good captures
-            if (captureIdx < goodCaptures) return next_best<CAPTURES>();
             // If in qsearch mode exit
             if (mode == QSEARCH) {
                 if (captureIdx < captures.size) return next_best<CAPTURES>();
                 break;
             }
-            // If in qsearch with checks move to evasions
-            if (mode == QSEARCH_CHECK) {
-                generationStage = INIT_EVASIONS;
-                next();
-            }
+            // Loop through all the good captures
+            if (captureIdx < goodCaptures) return next_best<CAPTURES>();
             // Increment the stage
             ++generationStage;
             [[fallthrough]];
@@ -114,7 +109,7 @@ Generator::Generator(Position* p, GenerationMode m, Move tt) {
     pos = p;
     side = pos->side();
     // Set the generation stage
-    generationStage = TT_MOVE;
+    generationStage = m == QSEARCH_CHECK ? INIT_EVASIONS : TT_MOVE;
     // Store the tt move
     ttMove = tt;
     // Set the generation mode

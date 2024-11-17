@@ -1,14 +1,13 @@
 #include "uci.hpp"
 #include "perft.hpp"
 #include "types.hpp"
-#include "bitboard.hpp"
 #include "movegen.hpp"
-#include "evaluate.hpp"
 #include "position.hpp"
 #include "tt.hpp"
 #include "misc.hpp"
 #include "search.hpp"
 #include "timing.hpp"
+#include "nn/evaluate.hpp"
 
 #include <iostream>
 #include <thread>
@@ -172,7 +171,7 @@ void Uci::parse(std::string command) {
         stop();
     }
     else if (token == "eval") {
-        std::cout << Evaluate::evaluate(&pos) << std::endl;
+        std::cout << network.predict(&pos) << std::endl;
     }
     else if (token == "d") {
         std::cout << pos << std::endl;
