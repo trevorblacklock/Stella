@@ -26,10 +26,10 @@ void Search::print_info_string() {
     Depth seldepth = max_seldepth();
 
     // Rest of information is retrieved from main thread
-    SearchData mainThread = threadData[0];
-    Depth depth = mainThread.rootDepth;
-    Value score = mainThread.score;
-    PvLine pv = mainThread.pvTable[0];
+    SearchData* mainThread = &threadData[0];
+    Depth depth = mainThread->rootDepth;
+    Value score = mainThread->score;
+    PvLine pv = mainThread->pvTable[0];
 
     // Calculate the nodes per second
     uint64_t nps = (nodes * 1000) / (elapsed + 1);
@@ -55,7 +55,7 @@ void Search::print_info_string() {
     if (pv.size)
         for (int i = 0; i < pv.size; i++) std::cout << " " << from_move(pv.moves[i], chess960);
     else
-        std::cout << " " << from_move(mainThread.bestMove, chess960);
+        std::cout << " " << from_move(mainThread->bestMove, chess960);
 
     // End with a newline
     std::cout << std::endl;
@@ -209,7 +209,8 @@ Move Search::search(Position* pos, TimeManager* manager, int id) {
 }
 
 template<NodeType nodeType>
-Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, Depth depth) {
+Value Search::alphabeta(Position* pos, SearchData* sd, 
+                        Value alpha, Value beta, Depth depth) {
     // Get some definitions for the current search
     Color us = pos->side();
     bool root = sd->ply == 0;
@@ -259,6 +260,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
     Value eval      = VALUE_NONE;
     Move  bestMove  = Move::none();
     Move  ttMove    = Move::none();
+    History* hist   = &sd->hist;
 
     // Check for a draw
     if (sd->ply && pos->is_draw())
@@ -316,7 +318,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd, Value alpha, Value beta, 
     }
 
     // Create move generator
-    Generator gen(pos, PV_SEARCH, ttMove);
+    Generator gen(pos, hist, PV_SEARCH, ttMove, sd->ply);
     Move m;
 
     // Count the number of moves
@@ -471,6 +473,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     Value standpat  = VALUE_NONE;
     Move  bestMove  = Move::none();
     Move  ttMove    = Move::none();
+    History* hist   = &sd->hist;
 
     // Check for a draw
     if (sd->ply && pos->is_draw())
@@ -534,7 +537,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     GenerationMode mode = inCheck ? QSEARCH_CHECK : QSEARCH;
 
     // Create a move generator for the position
-    Generator gen(pos, mode, Move::none());
+    Generator gen(pos, hist, mode, Move::none(), sd->ply);
     Move m;
     int moveCnt = 0;
 

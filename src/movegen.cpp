@@ -1,7 +1,6 @@
 #include <iostream>
 
 #include "movegen.hpp"
-#include "history.hpp"
 #include "position.hpp"
 #include "misc.hpp"
 
@@ -104,10 +103,12 @@ Generator::Generator(Position* p) {
     generate<LEGAL>();
 }
 
-Generator::Generator(Position* p, GenerationMode m, Move tt) {
+Generator::Generator(Position* p, History* h, GenerationMode m, Move tt, int searchPly) {
     // Initialize the generator object
     pos = p;
+    hist = h;
     side = pos->side();
+    ply = searchPly;
     // Set the generation stage
     generationStage = m == QSEARCH_CHECK ? INIT_EVASIONS : TT_MOVE;
     // Store the tt move
@@ -217,7 +218,7 @@ inline void Generator::add_move(Move m) {
         }
         else if (T == QUIETS || T == EVASIONS) {
             // Add this move to the quiets list
-            quiets.scores[quiets.size] = get_move_score(pos, m);
+            quiets.scores[quiets.size] = hist->get_history(pos, m, ply);
             quiets.moves[quiets.size++] = m;
         }
     }

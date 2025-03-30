@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "bitboard.hpp"
+#include "history.hpp"
 
 namespace Stella {
 
@@ -67,8 +68,12 @@ private:
     GenerationMode mode;
     // Store the side to move
     Color side;
+    // Store the ply of the search (if one is run)
+    uint8_t ply;
     // Store a pointer to the active position
     Position* pos;
+    // Store a pointer to the histories
+    History* hist;
     // Store the passed move from the transposition table
     Move ttMove;
     // Whether quiet generation should be skipped, relevant in certain
@@ -85,10 +90,7 @@ public:
     // Constructor for generator in perft
     Generator(Position* p);
     // Constsructor for generator used in search
-    Generator(Position* p, GenerationMode m, Move tt);
-    // Initialize the move generator
-    void init(Position* p);
-    void init(Position* p, int ply);
+    Generator(Position* p, History* h, GenerationMode m, Move tt, int ply);
     // Return the next move in generation
     Move next();
     // Find the next best move given the generation type

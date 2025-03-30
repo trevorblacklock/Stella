@@ -17,7 +17,7 @@ struct PositionInfo {
     int       castlingRights = 0;
     int       fiftyRule = 0;
     int       pliesFromNull = 0;
-    int      repetition = 0;
+    int       repetition = 0;
     Piece     capturedPiece = NO_PIECE;
     Square    epSquare = SQ_NONE;
     Bitboard  checks = 0;
@@ -93,6 +93,7 @@ public:
     Bitboard pieces() const;
     // Return combined bitboard for two piecetypes
     Bitboard pieces(PieceType pt1, PieceType pt2) const;
+    Bitboard pieces(Color c, PieceType pt1, PieceType pt2) const;
 
     // Return all the non-pawn material for a side.
     Bitboard non_pawn_material(Color c) const;
@@ -174,7 +175,7 @@ public:
     // Return a bitboard for all attackers on a given square
     Bitboard attackers(Square s, std::optional<Bitboard> occupied = std::nullopt) const;
 
-    // Return a bitboard for attacks by a piecetype from the opponent
+    // Return a bitboard for attacks by a piecetype from the side to move
     Bitboard attacks_by(PieceType pt, Color side) const;
 
     // Get the gamephase score of the current position
@@ -270,6 +271,10 @@ inline void Position::change_side() {
 
 inline Bitboard Position::pieces(PieceType pt1, PieceType pt2) const {
     return pieces(pt1) | pieces(pt2);
+}
+
+inline Bitboard Position::pieces(Color c, PieceType pt1, PieceType pt2) const {
+    return pieces(pt1, pt2) & pieces(c);
 }
 
 inline Piece Position::piece_on(Square s) const {

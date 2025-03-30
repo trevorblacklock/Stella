@@ -33,7 +33,9 @@ struct RootMove {
 
 // Structure for storing information to be continuously updated and used through recursive search.
 // Inherits move histories which are updated ply by ply in a new instance.
-struct SearchData : History {
+struct SearchData {
+    History hist;
+
     int threadId;
     int ply;
     int rootDepth;
