@@ -309,6 +309,9 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         if (alpha >= beta) return alpha;
     }
 
+    // Reset the previous killers
+    hist->clear_killers_grandchildren(us, sd->ply);
+
     // Check for a transposition table entry
     TTentry* entry = table.probe(key, found);
     Value ttScore = found ? value_from_tt(entry->score(), sd->ply, pos->fifty_rule()) : VALUE_NONE;
