@@ -9,10 +9,34 @@
 
 namespace Stella {
 
+void update_continuation_histories(Position* pos, History* hist, 
+                                   int ply, Piece pc, Square to, int bonus);
+void update_quiet_stats(Position* pos, History* hist, int ply, Move m, int bonus);
+void update_history(Position* pos, History* hist, Generator* gen, 
+                    int ply, Move best, int depth);
+
 // Define constructor for setting thread using default constructor.
 SearchData::SearchData(int id) : threadId(id) {}
 // Default constructor
 SearchData::SearchData() {}
+
+// Clear SearchData
+template<bool full>
+void SearchData::clear() {
+
+    if (full) {
+        pvTable.reset();
+        hist.clear();
+    }
+
+    ply = 0;
+    rootDepth = 0;
+    stop = false;
+    nodes = 0;
+    selDepth = 0;
+    score = -VALUE_INFINITE;
+    bestMove = Move::none();
+}
 
 template<Bound bound>
 void Search::print_info_string() {
@@ -91,7 +115,15 @@ void Search::set_threads(int num) {
 
     // Create the new threads
     for (int i = 0; i < threadCount; ++i) {
-        threadData.emplace_back();
+        threadData.emplace_back(SearchData(i));
+    }
+}
+
+// Clear the thread data, this is usually called when starting a new game
+void Search::clear_thread_data() {
+    // Loop through each thread
+    for (auto& thread : threadData) {
+        thread.clear<true>();
     }
 }
 
@@ -135,15 +167,8 @@ Move Search::search(Position* pos, TimeManager* manager, int id) {
         assert(tm);
 
         // Reset each thread
-        for (int i = 0; i < threadCount; i++) {
-            // Allocate a stack up to max ply for search data, using ply + 7 for continuation histories
-            threadData[i].threadId = i;
-            threadData[i].stop = false;
-            threadData[i].nodes = 0;
-            threadData[i].selDepth = 0;
-            threadData[i].ply = 0;
-            threadData[i].score = -VALUE_INFINITE;
-            threadData[i].bestMove = Move::none();
+        for (auto& thread : threadData) {
+            thread.clear<false>();
         }
 
         // Call this function with each non main thread now,
@@ -261,6 +286,12 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     Move  bestMove  = Move::none();
     Move  ttMove    = Move::none();
     History* hist   = &sd->hist;
+
+    // Check if a move draws from an upcoming repetition
+    if (sd->ply && alpha < VALUE_DRAW && pos->has_game_cycled(sd->ply)) {
+        alpha = 8 - (sd->nodes & 0xF);
+        if (alpha >= beta) return alpha;
+    }
 
     // Check for a draw
     if (sd->ply && pos->is_draw())
@@ -406,6 +437,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
             if (score >= beta) {
                 // Store the result in the transposition table
                 table.save<nodeType>(key, depth, value_to_tt(score, sd->ply), standpat, m, BOUND_LOWER);
+                // Update the histories
+                update_history(pos, hist, &gen, sd->ply, bestMove, depth);
                 // Return the score
                 return score;
             }
@@ -554,7 +587,9 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
 
         // Pruning for current position
         if (bestScore > VALUE_LOSS_MAX_PLY && pos->non_pawn_material(us)) {
-            if (isCapture && see < 0) continue;
+            if (isCapture && see < 0) {
+                continue;  
+            }
         }
 
         moveCnt++;
@@ -604,10 +639,82 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     // The depth is determined by if there is a beta cutoff and in check.
     if (moveCnt)
         table.save<nodeType>(key, 0, value_to_tt(bestScore, sd->ply), standpat, bestMove,
-                            bestScore >= beta ? BOUND_LOWER : BOUND_UPPER);
+                             bestScore >= beta ? BOUND_LOWER : BOUND_UPPER);
 
     // Return the best score
     return bestScore;
+}
+
+int stat_bonus(int depth) {
+    return std::min(150 * depth - 90, 1500);
+}
+
+int stat_malus(int depth) {
+    return std::min(700 * depth - 200, 2500);
+}
+
+void update_continuation_histories(Position* pos, History* hist, 
+                                   int ply, Piece pc, Square to, int bonus) {
+    for (int i : {1, 2, 3, 4, 6}) {
+        // Only update first two if in check
+        if (pos->checks() && i > 2) 
+            break;
+        if (pos->previous(i).move.is_ok()) {
+            hist->update_continuation(pc, to, ply - i, bonus / (1 + 3 * (i == 3)));
+        }
+    }
+}
+
+void update_quiet_stats(Position* pos, History* hist, int ply, Move m, int bonus) {
+    Color us = pos->side();
+
+    // Update killer moves
+    if (!pos->is_promotion(m))
+        hist->set_killer(us, m, ply);
+
+    // Update main and continuation history
+    hist->update_butterfly(us, m, bonus);
+    update_continuation_histories(pos, hist, ply, pos->piece_moved(m), m.to(), bonus);
+}
+
+void update_history(Position* pos, History* hist, Generator* gen, 
+                    int ply, Move best, int depth) {
+    Piece pc;
+    Square to;
+    PieceType cap;
+    
+    MoveList searched = gen->get_searched_list();
+    
+    int bonus = stat_bonus(depth);
+    int malus = stat_malus(depth);
+
+    if (pos->is_capture(best)) {
+        pc = pos->piece_moved(best);
+        to = best.to();
+        cap = piece_type(pos->piece_on(to));
+        hist->update_capture(pc, to, cap, bonus);
+    }
+
+    else {
+        update_quiet_stats(pos, hist, ply, best, bonus);
+
+        for (int i = 0; i < searched.size; ++i) {
+            Move m = searched.moves[i];
+            if (!pos->is_capture(m) && m != best) {
+                update_quiet_stats(pos, hist, ply, m, -malus);
+            }
+        }
+    }
+
+    for (int i = 0; i < searched.size; ++i) {
+        Move m = searched.moves[i];
+        if (pos->is_capture(m) && m != best) {
+            pc = pos->piece_moved(m);
+            to = m.to();
+            cap = piece_type(pos->piece_on(to));
+            hist->update_capture(pc, to, cap, -malus);
+        }
+    }
 }
 
 }

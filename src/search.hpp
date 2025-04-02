@@ -34,13 +34,12 @@ struct RootMove {
 // Structure for storing information to be continuously updated and used through recursive search.
 // Inherits move histories which are updated ply by ply in a new instance.
 struct SearchData {
-    History hist;
-
     int threadId;
     int ply;
     int rootDepth;
     bool stop;
     Pv pvTable;
+    History hist;
 
     uint64_t nodes;
     Depth selDepth;
@@ -49,6 +48,10 @@ struct SearchData {
 
     SearchData();
     explicit SearchData(int id);
+
+    // Function to clear searchdata
+    template<bool full>
+    void clear();
 };
 
 // Class the manage the search, allocation of threads and time management
@@ -81,6 +84,8 @@ public:
     void set_threads(int num);
     // Stop threads
     void stop();
+    // Clear all the thread data
+    void clear_thread_data();
 
     // Main search function to launch threads
     Move search(Position* pos, TimeManager* manager, int id = 0);
