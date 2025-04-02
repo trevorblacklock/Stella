@@ -98,6 +98,8 @@ public:
     Move next_best();
     // Add a move to the list of searched moves
     void add_searched(Move m);
+    // Get the searched movelist
+    MoveList get_searched_list() const;
     // Return the sizes of the move lists
     template<GenerationType T>
     uint16_t count() const;

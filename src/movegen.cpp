@@ -206,11 +206,11 @@ inline void Generator::add_move(Move m) {
             // If see is above 0, then consider it a good capture
             if (score >= 0) {
                 goodCaptures++;
-                score += 100000;
+                score += 100000 + hist->get_history(pos, m, ply);
             }
             // Otherwise its a bad one
             else {
-                score += 1000;
+                score += 1000 + hist->get_history(pos, m, ply);
             }
             // Add this move to the captures list
             captures.scores[captures.size] = score;
@@ -228,6 +228,10 @@ inline void Generator::add_move(Move m) {
 void Generator::add_searched(Move m) {
     searched.moves[searchedIdx++] = m;
     searched.size++;
+}
+
+MoveList Generator::get_searched_list() const {
+    return searched;
 }
 
 // Generate all the pawn moves in the position
