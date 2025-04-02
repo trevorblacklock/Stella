@@ -18,89 +18,15 @@ private:
     std::vector<int> coeff;
 
 public:
-    Stats(int dim, ...) {
-        assert(dim > 0);
-        num = dim;
-
-        // Store the shape temporarily to compute the coefficients to map Z^n to Z
-        std::vector<int> shape;
-
-        // Create variadic arguments
-        std::va_list args;
-        va_start(args, dim);
-        int curr;
-        size = 1;
-
-        // Loop through arguments
-        for (int i = 0; i < dim; ++i) {
-            curr = va_arg(args, int);
-            assert(curr > 0);
-            size *= curr;
-            shape.push_back(curr);
-        }
-
-        // Allocate memory to data pointer
-        data = new T[size];
-
-        // Compute coefficients of map
-        for (int i1 = 1; i1 < dim; ++i1) {
-            curr = 1;
-            for (int i2 = i1; i2 < dim; ++i2) {
-                curr *= shape[i2];
-            }
-            coeff.push_back(curr);
-        }
-        // Final index should be one
-        coeff.push_back(1);
-    }
-
+    Stats(int dim, ...);
+    Stats(const Stats<T>& s);
     ~Stats() { delete data; };
 
     void reset(T v) { std::fill(data, data + size, v); };
 
-    T operator()(int idx, ...) const {
-        assert(idx >= 0);
-
-        // Multiply first index by first coefficient
-        idx *= coeff[0];
-
-        // Create variadic arguments
-        std::va_list args;
-        va_start(args, idx);
-        int curr;
-
-        // Loop through arguments and apply coefficients
-        for (int i = 1; i < num; ++i) {
-            curr = va_arg(args, int);
-            assert(curr >= 0);
-            idx += curr * coeff[i];
-        }
-
-        // Return the data at the computed location
-        return data[idx];
-    }
-
-    T& operator()(int idx, ...) {
-        assert(idx >= 0);
-
-        // Multiply first index by first coefficient
-        idx *= coeff[0];
-
-        // Create variadic arguments
-        std::va_list args;
-        va_start(args, idx);
-        int curr;
-
-        // Loop through arguments and apply coefficients
-        for (int i = 1; i < num; ++i) {
-            curr = va_arg(args, int);
-            assert(curr >= 0);
-            idx += curr * coeff[i];
-        }
-
-        // Return the data at the computed location
-        return data[idx];
-    }
+    Stats<T>& operator=(const Stats<T>& s);
+    T operator()(int idx, ...) const;
+    T& operator()(int idx, ...);
 };
 
 struct History {

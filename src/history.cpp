@@ -5,6 +5,121 @@
 
 namespace Stella {
 
+template<typename T>
+Stats<T>::Stats(int dim, ...) {
+    assert(dim > 0);
+    num = dim;
+
+    // Store the shape temporarily to compute the coefficients to map Z^n to Z
+    std::vector<int> shape;
+
+    // Create variadic arguments
+    std::va_list args;
+    va_start(args, dim);
+    int curr;
+    size = 1;
+
+    // Loop through arguments
+    for (int i = 0; i < dim; ++i) {
+        curr = va_arg(args, int);
+        assert(curr > 0);
+        size *= curr;
+        shape.push_back(curr);
+    }
+
+    // Allocate memory to data pointer
+    data = new T[size];
+
+    // Compute coefficients of map
+    for (int i1 = 1; i1 < dim; ++i1) {
+        curr = 1;
+        for (int i2 = i1; i2 < dim; ++i2) {
+            curr *= shape[i2];
+        }
+        coeff.push_back(curr);
+    }
+    // Final index should be one
+    coeff.push_back(1);
+}
+
+template Stats<Move>::Stats(int dim, ...);
+template Stats<Value>::Stats(int dim, ...);
+
+template<typename T>
+Stats<T>::Stats(const Stats<T>& s) {
+    *this = s;
+}
+
+template Stats<Move>::Stats(const Stats<Move>& s);
+template Stats<Value>::Stats(const Stats<Value>& s);
+
+template<typename T>
+Stats<T>& Stats<T>::operator=(const Stats<T>& s) {
+    this->num = s.num;
+    this->size = s.size;
+    this->coeff = s.coeff;
+
+    this->data = new T[size];
+    std::copy(s.data, s.data + s.size, this->data);
+
+    return *this;
+}
+
+template Stats<Move>& Stats<Move>::operator=(const Stats<Move>& s);
+template Stats<Value>& Stats<Value>::operator=(const Stats<Value>& s);
+
+template<typename T>
+T Stats<T>::operator()(int idx, ...) const {
+    assert(idx >= 0);
+
+    // Multiply first index by first coefficient
+    idx *= coeff[0];
+
+    // Create variadic arguments
+    std::va_list args;
+    va_start(args, idx);
+    int curr;
+
+    // Loop through arguments and apply coefficients
+    for (int i = 1; i < num; ++i) {
+        curr = va_arg(args, int);
+        assert(curr >= 0);
+        idx += curr * coeff[i];
+    }
+
+    // Return the data at the computed location
+    return data[idx];
+}
+
+template Move Stats<Move>::operator()(int idx, ...) const;
+template Value Stats<Value>::operator()(int idx, ...) const;
+
+template<typename T>
+T& Stats<T>::operator()(int idx, ...) {
+    assert(idx >= 0);
+
+    // Multiply first index by first coefficient
+    idx *= coeff[0];
+
+    // Create variadic arguments
+    std::va_list args;
+    va_start(args, idx);
+    int curr;
+
+    // Loop through arguments and apply coefficients
+    for (int i = 1; i < num; ++i) {
+        curr = va_arg(args, int);
+        assert(curr >= 0);
+        idx += curr * coeff[i];
+    }
+
+    // Return the data at the computed location
+    return data[idx];
+}
+
+template Move& Stats<Move>::operator()(int idx, ...);
+template Value& Stats<Value>::operator()(int idx, ...);
+
 void History::clear() {
     killers.reset(Move::none());
     butterflyHistory.reset(VALUE_ZERO);
@@ -52,8 +167,7 @@ Value History::get_history(Position* pos, Move m, int ply) const {
                 + get_continuation(pc, to, ply - 1)
                 + get_continuation(pc, to, ply - 2)
                 + get_continuation(pc, to, ply - 3)
-                + get_continuation(pc, to, ply - 4)
-                + get_continuation(pc, to, ply - 5)
+                + get_continuation(pc, to, ply - 4) / 3
                 + get_continuation(pc, to, ply - 6);
 
         v += bool(pos->check_squares(pt) & to) * 16000;
@@ -88,7 +202,6 @@ Value History::get_capture(Piece pc, Square to, PieceType pt) const {
 
 Value History::get_continuation(Piece pc, Square sq, int ply) const {
     assert(ply >= -7 && ply < MAX_PLY);
-    return VALUE_ZERO;
     return continuationHistory(ply + 7, pc, sq);
 }
 
@@ -138,18 +251,22 @@ bool History::is_killer(Color side, Move m, int ply) const {
 
 void History::update_butterfly(Color side, Move m, Value b) {
     assert(m.is_ok());
-    butterflyHistory(side, m.from(), m.to()) += b - butterflyHistory(side, m.from(), m.to()) 
-                                              * abs(b) / 7000;
+    auto& entry = butterflyHistory(side, m.from(), m.to());
+    entry += b - entry * abs(b) / 7000;
+    assert(abs(entry) <= 7000);
 }
 
 void History::update_capture(Piece pc, Square to, PieceType pt, Value b) {
-    captureHistory(pc, to, pt) += b - captureHistory(pc, to, pt) * abs(b) / 10000;
+    auto& entry = captureHistory(pc, to, pt);
+    entry += b - entry * abs(b) / 10000;
+    assert(abs(entry) <= 10000);
 }
 
 void History::update_continuation(Piece pc, Square sq, int ply, Value b) {
     assert(ply >= -7 && ply < MAX_PLY);
-    continuationHistory(ply + 7, pc, sq) += b - continuationHistory(ply + 7, pc, sq) 
-                                          * abs(b) / 25000;
+    auto& entry = continuationHistory(ply + 7, pc, sq);
+    entry += b - entry * abs(b) / 25000;
+    assert(abs(entry) <= 25000);
 }
 
 }
