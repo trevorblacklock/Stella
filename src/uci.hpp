@@ -42,6 +42,9 @@ public:
     // Function to parse a command beginning in "setoption", for example "setoption name Hash value 16".
     void parse_option(std::string opt, std::string val);
 
+    // Start a new game
+    void newgame();
+
     // Stop the search.
     void stop();
 

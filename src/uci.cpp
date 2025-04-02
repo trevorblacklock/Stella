@@ -164,6 +164,9 @@ void Uci::parse(std::string command) {
         // Set the option
         parse_option(opt, val);
     }
+    else if (token == "ucinewgame") {
+        newgame();
+    }
     else if (token == "isready") {
         std::cout << "readyok" << std::endl;
     }
@@ -251,6 +254,8 @@ void Uci::parse_go(std::string command) {
 }
 
 void Uci::parse_position(std::string command) {
+    // Call newgame in case not specified
+    newgame();
     // Find the fen and the subsequent moves
     auto fenStr = command.find("fen");
     auto movesStr = command.find("moves");
@@ -308,6 +313,10 @@ void Uci::parse_option(std::string opt, std::string val) {
         size_t mb = is_number(val) ? std::stoi(val) : 16;
         table.resize(mb);
     }
+}
+
+void Uci::newgame() {
+    s.clear_thread_data();
 }
 
 void Uci::stop() {
