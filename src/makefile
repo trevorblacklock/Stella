@@ -300,7 +300,10 @@ obj-clean:
 pgo-clean:
 	@rm -f *.gcda *.gcno nn/*.gcda nn/*.gcno bench.out
 
-clean: obj-clean pgo-clean
+bin-clean:
+	@rm -rf ../bin
+
+clean: obj-clean pgo-clean bin-clean
 	@echo "Cleaning directory.."
 
 default:
