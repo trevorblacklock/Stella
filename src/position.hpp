@@ -25,6 +25,7 @@ struct PositionInfo {
     Bitboard  pinners = 0;
     Value     nonPawnMaterial[COLOR_NB] = {VALUE_ZERO};
     Bitboard  checkSquares[PIECE_TYPE_NB] = {0};
+    Move      move = Move::none();
 };
 
 // Position class stores everything about a position.
@@ -75,7 +76,7 @@ public:
     Position(const std::string& fen, bool chess960);
     Position(const Position& pos);
     ~Position() = default;
-    Position& operator=(const Position&);
+    Position& operator=(const Position& pos);
 
     // Return a fen string for the given position if possible.
     std::string fen() const;
@@ -136,8 +137,8 @@ public:
     bool  is_quiet(Move m) const;
 
     // Information regarding previous states.
-    PositionInfo* previous() const;
-    PositionInfo* previous(int count) const;
+    PositionInfo  previous() const;
+    PositionInfo  previous(int count) const;
     Key           previous_key() const;
     Key           previous_key(int count) const;
 
@@ -155,6 +156,9 @@ public:
 
     // Draw detection by threefold or fifty move rule.
     bool is_draw() const;
+
+    // Draw detection by cuckoo tables
+    bool has_game_cycled(int ply) const;
 
     // Change the side from the current to move.
     void change_side();
@@ -187,6 +191,15 @@ std::ostream& operator<<(std::ostream& os, const Position& pos);
 
 inline Key Position::key() const {
     return current->key;
+}
+
+inline PositionInfo Position::previous() const {
+    return positionHistory.rbegin()[1];
+}
+
+inline PositionInfo Position::previous(int count) const {
+    assert(count >= 1);
+    return positionHistory.rbegin()[count];
 }
 
 inline CastlingRights Position::castling_rights(Color c) const {

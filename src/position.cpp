@@ -1,4 +1,5 @@
 #include <iostream>
+#include <array>
 #include <cassert>
 #include <string>
 #include <cstring>
@@ -23,6 +24,20 @@ Key side;
 
 }
 
+// Implements Marcel van Kervinck's and Stockfish's cuckoo algorithm to detect repetition of positions
+// for 3-fold repetition draws. The algorithm uses two hash tables with Zobrist hashes
+// to allow fast detection of recurring positions. For details see:
+// http://web.archive.org/web/20201107002606/https://marcelk.net/2013-04-06/paper/upcoming-rep-v2.pdf
+namespace Cuckoo {
+
+inline int Hs1(Key key) { return key & 0x1fff; }
+inline int Hs2(Key key) { return (key >> 16) & 0x1fff; }
+
+std::array<Key, 8192> keys;
+std::array<Move, 8192> moves;
+
+}
+
 // Initalize hash keys
 void Position::init() {
     // Pseudo random number generator with the given seed
@@ -44,6 +59,47 @@ void Position::init() {
 
     // Write keys for side
     Zobrist::side = rng.random<Key>();
+
+    // Initialize the cuckoo tables
+    Cuckoo::keys.fill(0ULL);
+    Cuckoo::moves.fill(Move::none());
+
+    int count = 0;
+
+    // Loop through and setup tables
+    for (PieceType pt = KNIGHT; pt <= KING; ++pt) {
+        for (Color c : {WHITE, BLACK}) {
+            Piece pc = make_piece(c, pt);
+            for (Square s1 = A1; s1 <= H8; ++s1) {
+                for (Square s2 = Square(s1 + 1); s2 <= H8; ++s2) {
+                    
+                    if (attacks_bb(s1, pt) & s2) {
+                        Move m = Move(s1, s2);
+                        Key key = Zobrist::pieces[pc][s1] 
+                                ^ Zobrist::pieces[pc][s2] 
+                                ^ Zobrist::side;
+
+                        int i = Cuckoo::Hs1(key);
+
+                        while (true) {
+                            std::swap(Cuckoo::keys[i], key);
+                            std::swap(Cuckoo::moves[i], m);
+
+                            // Break when at an empty slot
+                            if (m == Move::none()) break;
+                            
+                            // Continue to pass until empty key is found
+                            i = (i == Cuckoo::Hs1(key)) ? Cuckoo::Hs2(key) : Cuckoo::Hs1(key);
+                        }
+
+                        ++count;
+                    }
+                }
+            }
+        }
+    }
+
+    assert(count == 3668);
 }
 
 std::ostream& operator<<(std::ostream& os, const Position& pos) {
@@ -562,7 +618,10 @@ void Position::do_move(Move m) {
     current->castlingRights = previous.castlingRights;
     current->fiftyRule = previous.fiftyRule;
     current->pliesFromNull = previous.pliesFromNull;
-    std::copy(std::begin(previous.nonPawnMaterial), std::end(previous.nonPawnMaterial), std::begin(current->nonPawnMaterial));
+    current->move = m;
+    std::copy(std::begin(previous.nonPawnMaterial), 
+              std::end(previous.nonPawnMaterial), 
+              std::begin(current->nonPawnMaterial));
 
     // Get the from and to square from the move
     const Square from = m.from();
@@ -616,8 +675,10 @@ void Position::do_move(Move m) {
         set_piece(make_piece(us, ROOK), rookTo);
 
         // Update the zobrist key
-        current->key ^= Zobrist::pieces[pc][kingFrom] ^ Zobrist::pieces[pc][kingTo]
-                    ^ Zobrist::pieces[piece_on(to)][rookFrom] ^ Zobrist::pieces[piece_on(to)][rookTo];
+        current->key ^= Zobrist::pieces[pc][kingFrom] 
+                      ^ Zobrist::pieces[pc][kingTo]
+                      ^ Zobrist::pieces[make_piece(us, ROOK)][rookFrom] 
+                      ^ Zobrist::pieces[make_piece(us, ROOK)][rookTo];
 
         // Set the captured piece to the castling rook
         captured = us == WHITE ? W_ROOK : B_ROOK;
@@ -714,6 +775,9 @@ void Position::do_move(Move m) {
     // Change the side to move
     change_side();
 
+    // Update the hash key for the current side
+    current->key ^= Zobrist::side;
+
     // Update state information
     update();
 
@@ -725,19 +789,15 @@ void Position::do_move(Move m) {
     // Check how far can go back
     size_t inc = std::min(current->fiftyRule, current->pliesFromNull);
     // Only update repetitions if inc is large enough
-    if (inc >= 4) {
-        // Update the repetitions for the current position
-        size_t end   = std::max(size_t(0), positionHistory.size() - 5);
-        size_t start = std::max(size_t(0), positionHistory.size() - 1 - inc);
+    if (inc >= 3) {
         // Loop through possible repeating positions, don't bother if fifty rule is small enough
-        for (size_t idx = start; idx >= end; idx += 2) {
-            if (positionHistory.at(idx).key == current->key) {
+        for (size_t idx = 3; idx <= inc; idx += 2) {
+            if (this->previous(idx - 1).key == current->key) {
                 ++current->repetition;
                 break;
             }
         }
     }
-
 }
 
 // Instantiate the templates
@@ -822,22 +882,22 @@ void Position::undo_move(Move m) {
 
         // Handle captures now
         if (current->capturedPiece != NO_PIECE) {
-        // Get the capture square
-        Square captureSq = to;
+            // Get the capture square
+            Square captureSq = to;
 
-        // Handle enpassant moves
-        if (type == EN_PASSANT) {
-            // Update the capture square
-            captureSq -= pawn_push(us);
-            // Check some basic assertions
-            assert(pc == make_piece(us, PAWN));
-            assert(piece_on(to) == NO_PIECE);
-            assert(to == positionHistory.end()[-2].epSquare);
-            assert(relative_rank(us, to) == RANK_6);
-        }
+            // Handle enpassant moves
+            if (type == EN_PASSANT) {
+                // Update the capture square
+                captureSq -= pawn_push(us);
+                // Check some basic assertions
+                assert(pc == make_piece(us, PAWN));
+                assert(piece_on(to) == NO_PIECE);
+                assert(to == previous().epSquare);
+                assert(relative_rank(us, to) == RANK_6);
+            }
 
-        // Place piece back
-        set_piece(current->capturedPiece, captureSq);
+            // Place piece back
+            set_piece(current->capturedPiece, captureSq);
         }
     }
 
@@ -845,8 +905,8 @@ void Position::undo_move(Move m) {
     if (lazy) network.update_history<true>(this, m, NO_PIECE, NO_PIECE);
 
     // Remove the state and adjust the current pointer
-    current = &positionHistory.end()[-2];
     positionHistory.pop_back();
+    current = &positionHistory.back();
 }
 
 template void Position::undo_move<true>(Move m);
@@ -859,6 +919,45 @@ bool Position::is_draw() const {
 
     // Return a draw if a position repeats once earlier
     return current->repetition >= 2;
+}
+
+bool Position::has_game_cycled(int ply) const {
+    int j;
+    int end = std::min(current->fiftyRule, current->pliesFromNull);
+
+    if (end < 3) return false;
+
+    PositionInfo active = previous();
+    Key other = current->key ^ active.key ^ Zobrist::side;
+
+    for (int i = 3; i <= end; i += 2) {
+
+        active = previous(i - 1);
+        other ^= active.key;
+        active = previous(i);
+        other ^= active.key ^ Zobrist::side;
+
+        if (other != 0ULL) continue;
+
+        Key moveKey = current->key ^ active.key;
+
+        if ( (j = Cuckoo::Hs1(moveKey), Cuckoo::keys[j] == moveKey) 
+          || (j = Cuckoo::Hs2(moveKey), Cuckoo::keys[j] == moveKey)) {
+            
+            Move m = Cuckoo::moves[j];
+            Square s1 = m.from();
+            Square s2 = m.to();
+
+            if (!((between_bb(s1, s2) ^ s2) & pieces())) {
+
+                if (ply > i) return true;
+
+                if (active.repetition) return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 Value Position::game_phase() const {
