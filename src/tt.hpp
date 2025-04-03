@@ -42,11 +42,13 @@ public:
         return aligned_free(ptr);
     }
 
+    void clear();
+
 private:
     friend class TTtable;
     uint32_t key32;
-    uint16_t score16;
-    uint16_t eval16;
+    int16_t score16;
+    int16_t eval16;
     Move move16;
     uint8_t depth8;
     uint8_t node8;
@@ -59,7 +61,7 @@ class TTtable {
 private:
     // Table configuration
     friend struct TTentry;
-    uint8_t generation;
+    uint8_t generation = 0;
     uint64_t num;
     uint64_t size;
     uint64_t maxSize = (1 << 12) * sizeof(TTentry);

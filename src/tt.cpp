@@ -7,6 +7,16 @@ namespace Stella {
 
 TTtable table;
 
+void TTentry::clear() {
+    key32 = 0;
+    score16 = 0;
+    eval16 = 0;
+    move16 = Move::none();
+    depth8 = 0;
+    node8 = 0;
+    age8 = 0;
+}
+
 TTtable::~TTtable() {
     dealloc();
 }
@@ -22,6 +32,8 @@ void TTtable::save(Key key, Depth depth, Value score, Value eval, Move m, Bound 
     assert(score > -VALUE_INFINITE && score < VALUE_INFINITE);
     // Make sure bound exists
     assert(b != BOUND_NONE);
+    // Ensure entry is not null
+    assert(entry);
 
     // Update entry info if empty
     if (entry->key32 == 0) {
@@ -29,10 +41,10 @@ void TTtable::save(Key key, Depth depth, Value score, Value eval, Move m, Bound 
         entry->key32 = static_cast<uint32_t>(key);
         entry->score16 = static_cast<int16_t>(score);
         entry->eval16 = static_cast<int16_t>(eval);
-        entry->move16 = m;
+        entry->move16 = static_cast<Move>(m);
         entry->depth8 = static_cast<uint8_t>(depth);
         entry->node8 = static_cast<uint8_t>(b);
-        entry->age8 = generation;
+        entry->age8 = static_cast<uint8_t>(generation);
     }
 
     // Check for a possible replacement
@@ -47,10 +59,10 @@ void TTtable::save(Key key, Depth depth, Value score, Value eval, Move m, Bound 
             entry->key32 = static_cast<uint32_t>(key);
             entry->score16 = static_cast<int16_t>(score);
             entry->eval16 = static_cast<int16_t>(eval);
-            entry->move16 = m;
+            entry->move16 = static_cast<Move>(m);
             entry->depth8 = static_cast<uint8_t>(depth);
             entry->node8 = static_cast<uint8_t>(T << 2 | b);
-            entry->age8 = generation;
+            entry->age8 = static_cast<uint8_t>(generation);
         }
     }
 }
@@ -90,8 +102,12 @@ void TTtable::resize(size_t mb) {
 void TTtable::clear() {
     // Reset generation
     generation = 0;
-    // Check for entries, if they exist set them to zero
-    if (entries) std::memset(entries, 0, size);
+    // Check for entries, if they exist clear them
+    if (entries) {
+        for (uint64_t i = 0; i < num; ++i) {
+            entries[i].clear();
+        }
+    }
 }
 
 void TTtable::dealloc() {
