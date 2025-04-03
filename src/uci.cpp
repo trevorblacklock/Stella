@@ -317,6 +317,7 @@ void Uci::parse_option(std::string opt, std::string val) {
 
 void Uci::newgame() {
     s.clear_thread_data();
+    table.clear();
 }
 
 void Uci::stop() {
