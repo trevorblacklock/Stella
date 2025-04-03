@@ -459,8 +459,9 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
 
     // Store the score into the transposition table
-    table.save<nodeType>(key, depth, value_to_tt(bestScore, sd->ply), standpat, bestMove,
-                        (bestMove != Move::none() && pvNode) ? BOUND_EXACT : BOUND_UPPER);
+    if (bestMove != Move::none())
+        table.save<nodeType>(key, depth, value_to_tt(bestScore, sd->ply), standpat, bestMove,
+                            (bestMove != Move::none() && pvNode) ? BOUND_EXACT : BOUND_UPPER);
 
     // Return the best score
     return bestScore;
@@ -542,9 +543,9 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     else {
         // For found transposition entries, try to find the standpat from there.
         if (found) {
-            standpat = bestScore = entry->eval();
+            standpat = entry->eval();
             // For values of none, run an evaluate
-            if (std::abs(bestScore) >= VALUE_WIN_MAX_PLY)
+            if (standpat == VALUE_NONE)
                 standpat = bestScore = pos->evaluate();
             // If the transposition table has a score we can use that for standpat
             if (ttScore != VALUE_NONE
@@ -640,7 +641,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
 
     // If there is moves, store the best value in the transposition table.
     // The depth is determined by if there is a beta cutoff and in check.
-    if (moveCnt)
+    if (bestMove != Move::none())
         table.save<nodeType>(key, 0, value_to_tt(bestScore, sd->ply), standpat, bestMove,
                              bestScore >= beta ? BOUND_LOWER : BOUND_UPPER);
 
