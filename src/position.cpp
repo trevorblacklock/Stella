@@ -785,8 +785,12 @@ void Position::do_move(Move m) {
     // Update state information
     update();
 
+    // If lazy updating off for perft, we don't need to update the network or
+    // calculate repetitions since its wasted compute power
+    if (!lazy) return;
+
     // Update the accumulator
-    if (lazy) network.update_history<false>(this, m, pc, captured);
+    network.update_history<false>(this, m, pc, captured);
 
     // Ensure reptition is false
     current->repetition = 0;
