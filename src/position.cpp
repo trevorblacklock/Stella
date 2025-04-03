@@ -11,6 +11,7 @@
 #include "bitboard.hpp"
 #include "types.hpp"
 #include "misc.hpp"
+#include "tt.hpp"
 
 namespace Stella {
 
@@ -777,6 +778,9 @@ void Position::do_move(Move m) {
 
     // Update the hash key for the current side
     current->key ^= Zobrist::side;
+
+    // Prefetch hashtable entry
+    if (prefetch) table.prefetch(current->key);
 
     // Update state information
     update();
