@@ -367,6 +367,16 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     else {
         standpat = eval = pos->evaluate();
     }
+    
+    // Futility pruning
+    if (!inCheck
+        && !pvNode
+        && depth < 8
+        && eval - depth * 100 >= beta
+        && !is_win(eval)
+        && sd->extMove.is_none()
+        && ttMove.is_none())
+        return eval;
 
     // Create move generator
     Generator gen(pos, hist, PV_SEARCH, ttMove, sd->ply);
