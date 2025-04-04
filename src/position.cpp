@@ -990,6 +990,63 @@ Value Position::game_phase() const {
         return phase;
 }
 
+bool Position::gives_check(Move m) const {
+    Color us = side();
+    Color them = ~us;
+
+    Square from = m.from();
+    Square to = m.to();
+    MoveType type = m.type();
+
+    Piece pc = piece_moved(m);
+    PieceType pt = piece_type(pc);
+
+    // Look with check squares to find if there is a direct check
+    if (check_squares(pt) & to) return true;
+
+    // Look if there is a discovery
+    Bitboard discovery = pieces();
+
+    discovery ^= from;
+    discovery |= to;
+
+    Square eksq = ksq(them);
+
+    if ((attacks_bb(eksq, ROOK, discovery) & pieces(us, QUEEN, ROOK)) | 
+        (attacks_bb(eksq, BISHOP, discovery) & pieces(us, QUEEN, BISHOP))) {
+        return true;
+    }
+
+    // Look at promotion pieces
+    if (type == PROMOTION) {
+        return attacks_bb(to, m.promotion(), pieces() ^ from) & eksq;
+    }
+
+    if (type == EN_PASSANT) {
+        Square capsq = to - pawn_push(us);
+        Bitboard occupied = pieces();
+        occupied ^= from;
+        occupied ^= capsq;
+        occupied |= to;
+        // Check for an attack now that we cleared the two pawns and replaced the capturing piece
+        return (attacks_bb(eksq, ROOK, occupied) & pieces(us, QUEEN, ROOK)) |
+               (attacks_bb(eksq, BISHOP, occupied) & pieces(us, QUEEN, BISHOP));
+    }
+
+    if (type == CASTLING) {
+        Square kingTo = to > from ? relative_square(us, G1) : relative_square(us, C1);
+        Square rookTo = to > from ? relative_square(us, F1) : relative_square(us, D1);
+        Bitboard occupied = pieces();
+        // Replace king on the to square and move the rook
+        occupied ^= from;
+        occupied ^= kingTo;
+        occupied ^= to;
+        return attacks_bb(rookTo, ROOK, occupied) & eksq;
+    }
+
+    return false;
+}
+
 Value Position::see(Move m) const {
     // Check the move is not a special or invalid case
     assert(m.is_ok());
