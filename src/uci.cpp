@@ -70,6 +70,8 @@ inline uint64_t get_val_from_key(std::string str, std::string key) {
 Uci::Uci() {
     // Set default threads
     s.set_threads(1);
+    // Init the lmr array
+    s.init_lmr();
     // Set default transposition table size
     table.resize(16);
 }
