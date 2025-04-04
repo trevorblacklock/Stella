@@ -4,6 +4,7 @@
 #ifndef TYPES_H_INCLUDED
 #define TYPES_H_INCLUDED
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -382,6 +383,23 @@ constexpr Value value_to_tt(Value v, int ply) {
     assert(v != VALUE_NONE);
     return v >= VALUE_WIN_MAX_PLY ? v + ply
             : v <= VALUE_LOSS_MAX_PLY ? v - ply : v;
+
+}
+
+constexpr bool is_win(Value v) {
+    return v > VALUE_WIN_MAX_PLY;
+}
+
+constexpr bool is_loss(Value v) {
+    return v < VALUE_LOSS_MAX_PLY;
+}
+
+constexpr bool is_extremity(Value v) {
+    return is_win(v) || is_loss(v);
+}
+
+constexpr Value clamp_score(Value v) {
+    return std::clamp(v, static_cast<Value>(VALUE_WIN_MAX_PLY), static_cast<Value>(VALUE_LOSS_MAX_PLY));
 }
 
 }
