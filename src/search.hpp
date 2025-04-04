@@ -50,6 +50,7 @@ struct SearchData {
 
     // Heuristics
     Value rootDelta;
+    Move extMove;
 
     SearchData();
     explicit SearchData(int id);

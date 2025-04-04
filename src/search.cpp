@@ -36,6 +36,7 @@ void SearchData::clear() {
     selDepth = 0;
     score = -VALUE_INFINITE;
     bestMove = Move::none();
+    extMove = Move::none();
 }
 
 template<Bound bound>
@@ -337,6 +338,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     // Check if tt can be used for an early cutoff
     if (found
         && !pvNode
+        && sd->extMove.is_none()
         && entry->depth() > depth - (entry->score() <= beta)
         && ttScore != VALUE_NONE
         && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER))) {
@@ -382,6 +384,9 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     // portion of generated moves will never have to be checked for legality.
     while ((m = gen.next()) != Move::none()) {
 
+        // If this is an extension move we should skip it
+        if (sd->extMove == m) continue;
+
         // Check the move here for legality
         if (!pos->is_legal(m)) continue;
 
@@ -397,17 +402,66 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         Value reduction = reductions(depth, legalMoves, beta - alpha, sd->rootDelta);
         Depth extension = 0;
 
+        // Singular move extensions
+        if (sd->ply < sd->rootDepth * 2
+            && depth >= 8
+            && sd->extMove.is_none()
+            && m == ttMove
+            && sd->ply > 0
+            && entry->depth() >= depth - 3
+            && ttScore != VALUE_NONE
+            && !is_extremity(ttScore)
+            && (entry->node() & BOUND_LOWER)) {
+            // Compute values for singular beta and singular depth
+            Value singularBeta = ttScore - depth * 2;
+            Depth singularDepth = (depth - 1) / 2;
+
+            assert(singularBeta > -VALUE_INFINITE && singularBeta < VALUE_INFINITE);
+
+            // Set the extension move prior to search
+            sd->extMove = m;
+            score = alphabeta<NON_PV>(pos, sd, singularBeta - 1, singularBeta, singularDepth);
+            sd->extMove = Move::none();
+            
+            // Set an extension if dont have a beta cutoff
+            if (score < singularBeta)
+                extension = 1 + !pvNode;
+            
+            // Given the bound of the ttentry, we can assume the ttMove will fail
+            // high. If a reduced search excluding the ttMove still failes
+            // high, we can assume this node is non-singular and prune the entire subtree.
+            else if (score >= beta && !is_extremity(score))
+                return score;
+
+            // If other moves failed high on a reduced search without the ttMove,
+            // yet the branch is not pruned since it does not exceed beta
+            // we can reduce the ttMove in favor of other moves.
+            else if (ttScore >= beta)
+                extension = -3;
+        }
+
         // Set the next depth to search
-        Depth newDepth = depth - 1;
+        Depth newDepth = depth - 1 + extension;
 
         // Increment the move counter
         moveCnt++;
         if (quiet) quietMoves++;
 
-        Value history = 2 * hist->get_butterfly(us, m)
-                      + hist->get_continuation(pc, to, sd->ply - 1)
-                      + hist->get_continuation(pc, to, sd->ply - 2)
-                      - 4000;
+        Value history;
+
+        if (isCapture)
+            history = 10 * piece_value(pos->piece_on(to)).mid
+                    + hist->get_capture(pc, to, piece_type(pos->piece_on(to)))
+                    - 4000;
+        else if (inCheck)
+            history = hist->get_butterfly(us, m)
+                    + hist->get_continuation(pc, to, sd->ply - 1)
+                    - 3000;
+        else
+            history = 2 * hist->get_butterfly(us, m)
+                    + hist->get_continuation(pc, to, sd->ply - 1)
+                    + hist->get_continuation(pc, to, sd->ply - 2)
+                    - 3000;
 
         reduction -= pvNode;
         reduction -= history / 15000;
@@ -472,7 +526,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
             // Check for a beta cutoff
             if (score >= beta) {
                 // Store the result in the transposition table
-                table.save<nodeType>(key, depth, value_to_tt(score, sd->ply), standpat, m, BOUND_LOWER);
+                if (sd->extMove.is_none())
+                    table.save<nodeType>(key, depth, value_to_tt(score, sd->ply), standpat, m, BOUND_LOWER);
                 // Update the histories
                 update_history(pos, hist, &gen, sd->ply, bestMove, depth);
                 // Return the score
@@ -487,12 +542,12 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
     // If there are no legal moves then its either stalemate of checkmate.
     // Can figure it out from knowing if we are in currently in check
-    if (legalMoves == 0) bestScore = inCheck ? mated_in(sd->ply) : VALUE_DRAW;
+    if (legalMoves == 0) bestScore = !sd->extMove.is_none() ? alpha : inCheck ? mated_in(sd->ply) : VALUE_DRAW;
     // Ensure the score falls within bounds
     assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
 
     // Store the score into the transposition table
-    if (bestMove != Move::none())
+    if (!bestMove.is_none() && sd->extMove.is_none())
         table.save<nodeType>(key, depth, value_to_tt(bestScore, sd->ply), standpat, bestMove,
                             (bestMove != Move::none() && pvNode) ? BOUND_EXACT : BOUND_UPPER);
 
@@ -700,7 +755,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
 
     // If there is moves, store the best value in the transposition table.
     // The depth is determined by if there is a beta cutoff and in check.
-    if (bestMove != Move::none())
+    if (!bestMove.is_none())
         table.save<nodeType>(key, 0, value_to_tt(bestScore, sd->ply), standpat, bestMove,
                              bestScore >= beta ? BOUND_LOWER : BOUND_UPPER);
 

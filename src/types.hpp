@@ -222,6 +222,7 @@ public:
     constexpr int from_to() const { return m_move & 0xFFF; }
     constexpr MoveType type() const { return MoveType(m_move & (3 << 14)); }
     constexpr PieceType promotion() const { return PieceType(((m_move >> 12) & 3) + KNIGHT); }
+    constexpr bool is_none() const { return m_move == 0; }
     constexpr bool is_ok() const { return from() != to(); }
     constexpr bool is_null() const { return m_move == 65; }
 
