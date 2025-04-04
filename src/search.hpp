@@ -34,6 +34,7 @@ struct RootMove {
 // Structure for storing information to be continuously updated and used through recursive search.
 // Inherits move histories which are updated ply by ply in a new instance.
 struct SearchData {
+    // Thread data
     int threadId;
     int ply;
     int rootDepth;
@@ -41,10 +42,14 @@ struct SearchData {
     Pv pvTable;
     History hist;
 
+    // Search data
     uint64_t nodes;
     Depth selDepth;
     Value score;
     Move bestMove;
+
+    // Heuristics
+    Value rootDelta;
 
     SearchData();
     explicit SearchData(int id);
@@ -66,6 +71,9 @@ private:
     // Store the rootmoves of the position
     std::vector<RootMove> rootMoves;
 
+    // Depths for lmr
+    Depth lmr[MAX_PLY][MAX_MOVES];
+
     // Flag for enabling/disabling info strings
     bool infoStrings = true;
     // Flag for chess960
@@ -75,6 +83,10 @@ private:
     TimeManager* tm;
 
 public:
+    // Initialize lmr array
+    void init_lmr();
+    // Get the reduction for this depth
+    Depth reductions(Depth depth, int legalMoves, Value delta, Value rootDelta);
     // Set info string
     void set_info_string(bool val) { infoStrings = val; }
     // Function for printing info string to the shell

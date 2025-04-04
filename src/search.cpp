@@ -127,6 +127,19 @@ void Search::clear_thread_data() {
     }
 }
 
+void Search::init_lmr() {
+    for (Depth depth = 0; depth < MAX_PLY; ++depth) {
+        for (int ply = 0; ply < MAX_MOVES; ++ply) {
+            if (depth == 0 || ply == 0) lmr[depth][ply] = 0;
+            else lmr[depth][ply] = 1.25 + std::log(depth) * std::log(ply) * 1 / 3;
+        }
+    }
+}
+
+Depth Search::reductions(Depth depth, int legalMoves, Value delta, Value rootDelta) {
+    return lmr[depth][legalMoves] + 1.5 - delta / rootDelta;
+}
+
 // Main search function called from Uci.
 // Sets up threads and calls them to run alpha beta function.
 // Returns the best move found from the search, starts and stops all threads.
@@ -189,6 +202,8 @@ Move Search::search(Position* pos, TimeManager* manager, int id) {
 
     Value alpha = -VALUE_INFINITE;
     Value beta = VALUE_INFINITE;
+
+    sd->rootDelta = beta - alpha;
 
     // Main iterative deepening loop
     for (Depth depth = 1; depth <= maxDepth; ++depth) {
@@ -338,11 +353,11 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     else if (found) {
         standpat = eval = entry->eval();
         // For values of none, run an evaluate
-        if (eval == VALUE_NONE)
+        if (standpat == VALUE_NONE || is_extremity(standpat))
             standpat = eval = pos->evaluate();
         // If the transposition table has a score we can use that for standpat
         if (ttScore != VALUE_NONE
-            && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER)))
+            && (entry->node() & (ttScore > eval ? BOUND_LOWER : BOUND_UPPER)))
             // Set the eval only, not standpat
             eval = ttScore;
     }
@@ -357,6 +372,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
     // Count the number of moves
     int legalMoves = 0;
+    int quietMoves = 0;
     int moveCnt = 0;
 
     // Loop through all pseudo-legal moves until none are left.
@@ -365,6 +381,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     // ordering aswell as the nature of the alpha-beta algorithm, a large
     // portion of generated moves will never have to be checked for legality.
     while ((m = gen.next()) != Move::none()) {
+
         // Check the move here for legality
         if (!pos->is_legal(m)) continue;
 
@@ -374,14 +391,28 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         Piece  pc          = pos->piece_moved(m);
         bool   isCapture   = pos->is_capture(m);
         bool   isPromotion = pos->is_promotion(m);
-        // bool   givesCheck  = pos->gives_check(m);
-        // bool   quiet       = !isCapture && !isPromotion && !givesCheck;
+        bool   givesCheck  = pos->gives_check(m);
+        bool   quiet       = !isCapture && !isPromotion && !givesCheck;
+
+        Value reduction = reductions(depth, legalMoves, beta - alpha, sd->rootDelta);
+        Depth extension = 0;
 
         // Set the next depth to search
         Depth newDepth = depth - 1;
 
         // Increment the move counter
         moveCnt++;
+        if (quiet) quietMoves++;
+
+        Value history = 2 * hist->get_butterfly(us, m)
+                      + hist->get_continuation(pc, to, sd->ply - 1)
+                      + hist->get_continuation(pc, to, sd->ply - 2)
+                      - 4000;
+
+        reduction -= pvNode;
+        reduction -= history / 15000;
+
+        Depth reducedDepth = std::clamp(newDepth - reduction, 0, newDepth + 1);
 
         // Send information about the current move if enough time has passed
         if (root && mainThread && infoStrings && !tm->forceStop && tm->elapsed() > 3000) {
@@ -404,8 +435,10 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         if (legalMoves == 0)
             score = -alphabeta<PV>(pos, sd, -beta, -alpha, newDepth);
         else {
-            score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, newDepth);
+            score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, reducedDepth);
             // Do a full re-search if score is with alpha and beta bounds
+            if (reducedDepth < newDepth && score > alpha)
+                score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, newDepth);
             if (score > alpha && score < beta)
                 score = -alphabeta<PV>(pos, sd, -beta, -alpha, newDepth);
         }
@@ -538,19 +571,19 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
 
     // Set standpat and bestscore to a mate value for checks
     if (inCheck) {
-        bestScore = -VALUE_INFINITE;
+        bestScore = standpat = -VALUE_INFINITE;
     }
     else {
         // For found transposition entries, try to find the standpat from there.
         if (found) {
-            standpat = entry->eval();
-            // For values of none, run an evaluate
-            if (standpat == VALUE_NONE)
-                standpat = bestScore = pos->evaluate();
+            standpat = bestScore = entry->eval();
+            // For values of none or extremeties, run an evaluate
+            if (standpat == VALUE_NONE || is_extremity(standpat))
+                bestScore = standpat = pos->evaluate();
             // If the transposition table has a score we can use that for standpat
             if (ttScore != VALUE_NONE
-                && std::abs(ttScore) < VALUE_WIN_MAX_PLY
-                && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER)))
+                && !is_extremity(ttScore)
+                && (entry->node() & (ttScore > bestScore ? BOUND_LOWER : BOUND_UPPER)))
                 // Set the eval only, not standpat
                 bestScore = ttScore;
         }
@@ -571,6 +604,8 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
         }
     }
 
+    Square prevSq = pos->previous().move.is_ok() ? pos->previous().move.to() : SQ_NONE;
+
     GenerationMode mode = inCheck ? QSEARCH_CHECK : QSEARCH;
 
     // Create a move generator for the position
@@ -580,21 +615,48 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
 
     // Loop through all the moves
     while ((m = gen.next()) != Move::none()) {
+
+        // Get some information about the move
+        Square from        = m.from();
+        Square to          = m.to();
+        Piece  pc          = pos->piece_moved(m);
+        bool   isCapture   = pos->is_capture(m);
+        bool   isPromotion = pos->is_promotion(m);
+        bool   givesCheck  = pos->gives_check(m);
+        bool   validSee    = !inCheck && (isCapture || isPromotion);
+
         // Check the legality of the move
         if (!pos->is_legal(m)) continue;
 
-        // Check if the move is a capture or not
-        bool isCapture = pos->is_capture(m);
+        // Pruning
+        if (!is_loss(bestScore)) {
+            // Futility pruning and movecount pruning
+            if (!givesCheck && to != prevSq && !is_loss(standpat) && m.type() != PROMOTION) {
+                // For an excessive number of moves (yes three) we can begin pruning
+                if (moveCnt > 2) 
+                    continue;
 
-        // get the current see value for this move
-        Value see = gen.see_value();
+                // If standpat and the piece value of capture is much lower than alpha,
+                // we can prune this move.
+                if (alpha >= standpat + piece_value(pos->piece_on(to)).mid + 400) 
+                    continue;
 
-        // Pruning for current position
-        if (bestScore > VALUE_LOSS_MAX_PLY && pos->non_pawn_material(us)) {
-            if (isCapture && see < 0) {
-                continue;  
+                // If static exchange is low we can prune
+                if (pos->see(m) <= alpha - standpat - 400) 
+                    continue;
             }
-        }
+
+            // Continuation history based pruning
+            if (!isCapture && hist->get_continuation(pc, to, sd->ply - 1) <= 2000)
+                continue;
+
+            // Static exchange evaluation based pruning
+            if (validSee) {
+                Value see = validSee ? pos->see(m) : 0;
+                // Values under zero represent bad captures
+                if (see < -50) continue;
+            }
+        }        
 
         moveCnt++;
 
@@ -618,9 +680,6 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
             // Update the bestscore
             bestScore = score;
             bestMove = m;
-
-            if (!pvNode && mainThread && !tm->forceStop)
-                sd->pvTable.update(m, sd->ply);
 
             // Check for beta cutoff
             if (score < beta)
