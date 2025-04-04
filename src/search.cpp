@@ -463,6 +463,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
                     + hist->get_continuation(pc, to, sd->ply - 2)
                     - 3000;
 
+        reduction += std::min(2, std::abs(eval - alpha) / 400);
+        reduction -= hist->is_killer(us, m, sd->ply);
         reduction -= pvNode;
         reduction -= history / 15000;
 
@@ -542,12 +544,14 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
     // If there are no legal moves then its either stalemate of checkmate.
     // Can figure it out from knowing if we are in currently in check
-    if (legalMoves == 0) bestScore = !sd->extMove.is_none() ? alpha : inCheck ? mated_in(sd->ply) : VALUE_DRAW;
+    if (legalMoves == 0) {
+        return inCheck ? mated_in(sd->ply) : VALUE_DRAW;
+    }
     // Ensure the score falls within bounds
     assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
 
     // Store the score into the transposition table
-    if (!bestMove.is_none() && sd->extMove.is_none())
+    if (sd->extMove.is_none())
         table.save<nodeType>(key, depth, value_to_tt(bestScore, sd->ply), standpat, bestMove,
                             (bestMove != Move::none() && pvNode) ? BOUND_EXACT : BOUND_UPPER);
 

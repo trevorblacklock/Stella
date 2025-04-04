@@ -256,8 +256,6 @@ void Uci::parse_go(std::string command) {
 }
 
 void Uci::parse_position(std::string command) {
-    // Call newgame in case not specified
-    newgame();
     // Find the fen and the subsequent moves
     auto fenStr = command.find("fen");
     auto movesStr = command.find("moves");
