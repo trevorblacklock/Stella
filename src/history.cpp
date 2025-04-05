@@ -48,8 +48,8 @@ Value History::get_history(Position* pos, Move m, int ply) const {
                                   | (pos->pieces(us, ROOK) & threatByMinor)
                                   | (pos->pieces(us, BISHOP, KNIGHT) & threatByPawn);
 
-        Value v = 2 * get_butterfly(us, m)
-                + 2 * get_continuation(pc, to, ply - 1)
+        Value v = get_butterfly(us, m) * 2
+                + get_continuation(pc, to, ply - 1) * 2
                 + get_continuation(pc, to, ply - 2)
                 + get_continuation(pc, to, ply - 3) / 4
                 + get_continuation(pc, to, ply - 4)
@@ -61,9 +61,9 @@ Value History::get_history(Position* pos, Move m, int ply) const {
                                      : pt == ROOK && !(threatByMinor & to)  ? 25000
                                      : !(threatByPawn & to)                 ? 15000 
                                      : 0) : 0;
-        v -= pt == QUEEN && (threatByRook & to) ? 50000
-           : pt == ROOK && (threatByMinor & to) ? 25000
-           : 0;
+        v -= !(threatenedPieces & from) ? (pt == QUEEN && (threatByRook & to)) ? 50000
+                                        : (pt == ROOK && (threatByMinor & to)) ? 25000
+                                        : 0 : 0;
 
         return v;
     }
