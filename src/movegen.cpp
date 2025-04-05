@@ -59,7 +59,7 @@ Move Generator::next() {
         // Get the good quiets
         case GOOD_QUIETS:
             // Placeholder until move ordering
-            if (quietIdx < quiets.size) return next_best<QUIETS>();
+            if (!skipQuiets && quietIdx < quiets.size) return next_best<QUIETS>();
             // Increment the stage
             ++generationStage;
             [[fallthrough]];
@@ -170,8 +170,6 @@ template<GenerationType T>
 inline Move Generator::next_best() {
     // If the type is a capture
     if (T == CAPTURES) {
-        // If skipping quiets, then don't bother to sort
-        if (skipQuiets) return captures.moves[captureIdx++];
         // Create int to hold best index
         int best;
         // Get the best move and it's index
@@ -183,19 +181,6 @@ inline Move Generator::next_best() {
     }
     // If the type is a quiet
     if (T == QUIETS) {
-        // If skipping quiets then only look at moves that give a direct check
-        if (skipQuiets) {
-            for (int i = quietIdx; i < quiets.size; i++) {
-                Move m = quiets.moves[i];
-                if (pos->check_squares(piece_type(pos->piece_moved(m))) & m.to()) {
-                    quietIdx = i + 1;
-                    return m;
-                }
-            }
-            // When out of quiets we move to the next stage
-            generationStage++;
-            return next();
-        }
         // Create int to hold best index
         int best;
         // Get the best move and it's index
@@ -233,11 +218,11 @@ inline void Generator::add_move(Move m) {
             // If see is above 0, then consider it a good capture
             if (score >= 0) {
                 goodCaptures++;
-                score += 100000 + hist->get_history(pos, m, ply);
+                score = 100000 + hist->get_history(pos, m, ply);
             }
             // Otherwise its a bad one
             else {
-                score += 1000 + hist->get_history(pos, m, ply);
+                score = 1000 + hist->get_history(pos, m, ply);
             }
             // Add this move to the captures list
             captures.scores[captures.size] = score;
