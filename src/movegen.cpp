@@ -59,7 +59,7 @@ Move Generator::next() {
         // Get the good quiets
         case GOOD_QUIETS:
             // Placeholder until move ordering
-            if (!skipQuiets && quietIdx < quiets.size) return next_best<QUIETS>();
+            if (!skipQuiets && quietIdx < goodQuiets) return next_best<QUIETS>();
             // Increment the stage
             ++generationStage;
             [[fallthrough]];
@@ -76,7 +76,9 @@ Move Generator::next() {
 
         // Get the bad quiets
         case BAD_QUIETS:
-            // Increment the stage
+            // Loop through the rest of the quiet 
+            if (!skipQuiets && quietIdx < quiets.size) return next_best<QUIETS>();
+            // No stages left so we can safely return nothing
             break;
 
         // Initialize the evasions
@@ -232,7 +234,14 @@ inline void Generator::add_move(Move m) {
             // First ensure move is not a killer
             if (m == killer1 || m == killer2) return;
             // Add this move to the quiets list
-            quiets.scores[quiets.size] = hist->get_history(pos, m, ply);
+            Value score = hist->get_history(pos, m, ply);
+            // Check if history is "good enough" to warrant no prejudice
+            if (score > - 10000) {
+                goodQuiets++;
+                score += 100000;
+            }
+            // Otherwise its a bad quiet and we don't offset the score
+            quiets.scores[quiets.size] = score;
             quiets.moves[quiets.size++] = m;
         }
     }
