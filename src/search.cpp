@@ -367,6 +367,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     if (inCheck) {
         standpat = eval = -VALUE_MATE + sd->ply;
     }
+    else if (!sd->extMove.is_none())
+        standpat = eval = pos->evaluate();
     // For found transposition entries, try to find the standpat from there.
     else if (found) {
         standpat = eval = entry->eval();
@@ -549,6 +551,11 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
             // we can reduce the ttMove in favor of other moves.
             else if (ttScore >= beta)
                 extension = -3;
+
+            // If the score we found exceeds the ttScore, we can reduce
+            // the ttMove since other moves are just as capable
+            if (ttScore <= score)
+                extension = -1;
         }
 
         // Set the next depth to search
