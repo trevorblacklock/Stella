@@ -3,44 +3,61 @@
 
 #include <iostream>
 #include <cstdarg>
+#include <array>
 
 #include "types.hpp"
 #include "position.hpp"
 
 namespace Stella {
 
-template<typename T>
-struct Stats {
+template<typename T, std::size_t Size, std::size_t... Sizes>
+class Stats;
+
+template<typename T, std::size_t Size, std::size_t... Sizes>
+struct MultiArrayHelper {
+    using ChildType = Stats<T, Sizes...>;
+};
+
+template<typename T, std::size_t Size>
+struct MultiArrayHelper<T, Size> {
+    using ChildType = T;
+};
+
+template<typename T, std::size_t Size, std::size_t... Sizes>
+class Stats {
+    using ChildType = typename MultiArrayHelper<T, Size, Sizes...>::ChildType;
+    using ArrayType = std::array<ChildType, Size>;
 private:
-    T* data;
-    int num;
-    size_t size;
-    std::vector<int> coeff;
-
+    ArrayType data;
+    std::size_t size;
 public:
-    Stats(int dim, ...);
-    Stats(const Stats<T>& s);
-    ~Stats() { delete data; };
+    Stats() : size(Size) { for (auto& i : std::initializer_list<std::size_t>{Sizes...}) size *= i; }
+    
+    using size_type = typename ArrayType::size_type;
 
-    void reset(T v) { std::fill(data, data + size, v); };
+    constexpr auto&       operator[](size_type idx) noexcept { return data[idx]; }
+    constexpr const auto& operator[](size_type idx) const noexcept { return data[idx]; }
 
-    Stats<T>& operator=(const Stats<T>& s);
-    T operator()(int idx, ...) const;
-    T& operator()(int idx, ...);
+    void fill(T v) {
+        for (auto& ele : data) {
+            if constexpr (sizeof...(Sizes) == 0) ele = v;
+            else ele.fill(v);
+        }
+    }
 };
 
 struct History {
 private:
     // Killer moves, indexed with ply and side to move
-    Stats<Move> killers = Stats<Move>(3, COLOR_NB, MAX_PLY + 2, 2);
+    Stats<Move, COLOR_NB, MAX_PLY + 2, 2> killers;
     // Butterfly history, indexed by from and to
-    Stats<Value> butterflyHistory = Stats<Value>(3, COLOR_NB, SQ_NB, SQ_NB);
+    Stats<Value, COLOR_NB, SQ_NB, SQ_NB> butterflyHistory;
     // Continuation history, from Stockfish
-    Stats<Value> continuationHistory = Stats<Value>(3, MAX_PLY + 7, PIECE_NB, SQ_NB);
+    Stats<Value, PIECE_NB, SQ_NB, MAX_PLY + 7> continuationHistory;
     // Capture history, indexed with piece, cap sq and cap piece type
-    Stats<Value> captureHistory = Stats<Value>(3, PIECE_NB, SQ_NB, PIECE_TYPE_NB);
+    Stats<Value, PIECE_NB, SQ_NB, PIECE_TYPE_NB> captureHistory;
     // Historic evaluation
-    Stats<Value> evalHistory = Stats<Value>(2, COLOR_NB, MAX_PLY);
+    Stats<Value, COLOR_NB, MAX_PLY> evalHistory;
 public:
     History() { clear(); };
     // Clear the structure
