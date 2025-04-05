@@ -129,20 +129,22 @@ inline void Generator::generate_mask() {
   else if (checkCount == 1) mask = between_bb(pos->ksq(side), lsb(pos->checks()));
 }
 
-// Helper function to probe a move list and find the highest score
-inline Move Generator::probe_list(MoveList& list, uint16_t& curr, int& best) {
+// Helper for returning the best move in a move list,
+// Removes the move from the list and indexes the passed index.
+// Stores the index of the best move in best.
+inline Move probe_list(MoveList* list, uint16_t& curr, int& best) {
     // Set current best to current move in the list
     best = curr;
     // Look through moves in the list beyond the current,
     // and find the highest scoring one
-    for (int idx = curr + 1; idx < list.size; ++idx)
-        if (list.scores[idx] > list.scores[best]) best = idx;
+    for (int idx = curr + 1; idx < list->size; ++idx)
+        if (list->scores[idx] > list->scores[best]) best = idx;
 
     // Replace best score with the current index, the old index will remain
     // but is never looked at again
-    Move m = list.moves[best];
-    list.scores[best] = list.scores[curr];
-    list.moves[best] = list.moves[curr++];
+    Move m = list->moves[best];
+    list->scores[best] = list->scores[curr];
+    list->moves[best] = list->moves[curr++];
     // Return the move
     return m;
 }
@@ -152,10 +154,12 @@ template<GenerationType T>
 inline Move Generator::next_best() {
     // If the type is a capture
     if (T == CAPTURES) {
+        // If skipping quiets, then don't bother to sort
+        if (skipQuiets) return captures.moves[captureIdx++];
         // Create int to hold best index
         int best;
         // Get the best move and it's index
-        Move m = probe_list(captures, captureIdx, best);
+        Move m = probe_list(&captures, captureIdx, best);
         // Set the see scores using the best index
         see = seeScore[best];
         // Return the best move
@@ -163,10 +167,23 @@ inline Move Generator::next_best() {
     }
     // If the type is a quiet
     if (T == QUIETS) {
+        // If skipping quiets then only look at moves that give a direct check
+        if (skipQuiets) {
+            for (int i = quietIdx; i < quiets.size; i++) {
+                Move m = quiets.moves[i];
+                if (pos->check_squares(piece_type(pos->piece_moved(m))) & m.to()) {
+                    quietIdx = i + 1;
+                    return m;
+                }
+            }
+            // When out of quiets we move to the next stage
+            generationStage++;
+            return next();
+        }
         // Create int to hold best index
         int best;
         // Get the best move and it's index
-        Move m = probe_list(quiets, quietIdx, best);
+        Move m = probe_list(&quiets, quietIdx, best);
         // Return the best move
         return m;
     }
