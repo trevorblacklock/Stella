@@ -49,10 +49,10 @@ Value History::get_history(Position* pos, Move m, int ply) const {
                                   | (pos->pieces(us, BISHOP, KNIGHT) & threatByPawn);
 
         Value v = 2 * get_butterfly(us, m)
-                + get_continuation(pc, to, ply - 1)
+                + 2 * get_continuation(pc, to, ply - 1)
                 + get_continuation(pc, to, ply - 2)
-                + get_continuation(pc, to, ply - 3)
-                + get_continuation(pc, to, ply - 4) / 3
+                + get_continuation(pc, to, ply - 3) / 4
+                + get_continuation(pc, to, ply - 4)
                 + get_continuation(pc, to, ply - 6);
 
         v += bool(pos->check_squares(pt) & to) * 16000;
