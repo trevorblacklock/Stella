@@ -30,8 +30,9 @@ public:
     int16_t eval() const { return eval16; }
     Move move() const { return move16; }
     uint8_t depth() const { return depth8; }
-    uint8_t node() const { return node8; }
+    uint8_t node() const { return node8 & 0x3; }
     uint8_t age() const { return age8; }
+    bool is_pv() const { return node8 & 0x4; }
 
     // Overload operators to allocate memory for an entry
     static void* operator new (size_t alignment, size_t size) {

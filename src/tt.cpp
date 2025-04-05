@@ -43,7 +43,7 @@ void TTtable::save(Key key, Depth depth, Value score, Value eval, Move m, Bound 
         entry->eval16 = static_cast<int16_t>(eval);
         entry->move16 = static_cast<Move>(m);
         entry->depth8 = static_cast<uint8_t>(depth);
-        entry->node8 = static_cast<uint8_t>(b);
+        entry->node8 = static_cast<uint8_t>(static_cast<bool>(T) << 2 | b);
         entry->age8 = static_cast<uint8_t>(generation);
     }
 
@@ -61,7 +61,7 @@ void TTtable::save(Key key, Depth depth, Value score, Value eval, Move m, Bound 
             entry->eval16 = static_cast<int16_t>(eval);
             entry->move16 = static_cast<Move>(m);
             entry->depth8 = static_cast<uint8_t>(depth);
-            entry->node8 = static_cast<uint8_t>(T << 2 | b);
+            entry->node8 = static_cast<uint8_t>(static_cast<bool>(T) << 2 | b);
             entry->age8 = static_cast<uint8_t>(generation);
         }
     }
@@ -80,7 +80,7 @@ TTentry* TTtable::probe(Key key, bool& found) const {
 
 void TTtable::resize(size_t mb) {
     // Deallocate memory if entries exist
-    if (entries) dealloc();
+    dealloc();
 
     // Calculate the new size of the table in bytes
     size_t bytes = mb * 1024 * 1024;
