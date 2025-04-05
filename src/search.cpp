@@ -303,6 +303,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     Move  bestMove  = Move::none();
     Move  ttMove    = Move::none();
     History* hist   = &sd->hist;
+    Square prevSq   = pos->previous().move.is_ok() ? pos->previous().move.to() : SQ_NONE;
 
     // Check if a move draws from an upcoming repetition
     if (sd->ply && alpha < VALUE_DRAW && pos->has_game_cycled(sd->ply)) {
@@ -344,6 +345,20 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         && ttScore != VALUE_NONE
         && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER))) {
 
+        // If the ttMove is quiet, update move sorting heuristics
+        if (!ttMove.is_none() && ttScore >= beta) {
+            // Bonus for quiet ttMove that fails high
+            if (!pos->is_capture(ttMove))
+                update_quiet_stats(pos, hist, sd->ply, ttMove, 
+                                   std::min(120 * depth - 75, 1250));
+
+            // Extra penalty for early quiet moves of the previous ply
+            if (prevSq != SQ_NONE && pos->previous().capturedPiece) {
+                update_continuation_histories(pos, hist, sd->ply, pos->piece_on(prevSq), 
+                                              prevSq, -std::min(800 * depth - 250, 3000));
+            }
+        }
+
         // So long as fifty move rule is not large, can return the score
         if (pos->fifty_rule() < 90) return ttScore;
     }
@@ -368,6 +383,11 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     else {
         standpat = eval = pos->evaluate();
     }
+
+    // Set the historic eval with the standpat, rather than the
+    // potentially adjusted eval from the hashtable.
+    hist->set_eval(us, sd->ply, standpat);
+    bool improving = hist->is_improving(us, sd->ply, standpat);
 
     // Razoring
     if (!inCheck
@@ -429,8 +449,9 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
     // Count the number of moves
     int legalMoves = 0;
-    int quietMoves = 0;
     int moveCnt = 0;
+    // Number of quiet moves we consider prior to skipping
+    int quietPruning = (3 + depth * depth) / (2 - improving);
 
     // Loop through all pseudo-legal moves until none are left.
     // Legality is checked before playing a move rather than during
@@ -456,6 +477,41 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         Value reduction = reductions(depth, legalMoves, beta - alpha, sd->rootDelta);
         Depth extension = 0;
+
+        // Move pruning
+        if (sd->ply
+            && pos->non_pawn_material(us)
+            && legalMoves != 0
+            && !is_loss(bestScore)) {
+
+            // Crude depth estimation
+            Depth moveDepth = std::max(1, depth - 1 - reduction);
+            
+            // Quiet move pruning 
+            if (quiet) {
+                // Check if we can prune out remaining quiet moves
+                if (gen.can_skip_quiets()) continue;
+
+                // If the number of searched quiets is high enough, we can skip
+                // the rest, since move ordering dictates they will likely not be good
+                if (moveCnt >= quietPruning) gen.skip_quiets();
+            }
+
+            if (isCapture || givesCheck) {
+                // Get the capture history
+                Piece capPiece = pos->piece_on(to);
+                Value history = hist->get_capture(pc, to, piece_type(capPiece));
+
+                // Futility pruning for captures
+                if (!givesCheck && !inCheck && moveDepth < 7) {
+                    Value futility = standpat + 250 + 250 * moveDepth 
+                                + piece_value(capPiece).mid + 100 * history / 1000;
+                    // If we cannot improve alpha with a best
+                    // case capture, we can skip this move
+                    if (futility <= alpha) continue;
+                }
+            }
+        }
 
         // Singular move extensions
         if (sd->ply < sd->rootDepth * 2
@@ -500,7 +556,6 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         // Increment the move counter
         moveCnt++;
-        if (quiet) quietMoves++;
 
         Value history;
 
@@ -521,6 +576,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         reduction += std::min(2, std::abs(eval - alpha) / 400);
         reduction -= hist->is_killer(us, m, sd->ply);
         reduction -= pvNode;
+        reduction -= improving;
+        reduction -= 2 * (m == ttMove);
         reduction -= history / 15000;
 
         Depth reducedDepth = std::clamp(newDepth - reduction, 0, newDepth + 1);
@@ -548,8 +605,12 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         else {
             score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, reducedDepth);
             // Do a full re-search if score is with alpha and beta bounds
-            if (reducedDepth < newDepth && score > alpha)
+            if (reducedDepth < newDepth && score > alpha) {
                 score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, newDepth);
+
+                // Post LMR continuation histories update
+                update_continuation_histories(pos, hist, sd->ply, pc, to, 1600);
+            }
             if (score > alpha && score < beta)
                 score = -alphabeta<PV>(pos, sd, -beta, -alpha, newDepth);
         }
