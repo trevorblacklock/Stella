@@ -920,6 +920,43 @@ void Position::undo_move(Move m) {
 template void Position::undo_move<true>(Move m);
 template void Position::undo_move<false>(Move m);
 
+void Position::do_null() {
+    // Store the current position as the previous ensuring to dereference from vector
+    PositionInfo previous = *current;
+    // Create a new state to push onto the end of the vector
+    positionHistory.emplace_back(PositionInfo {});
+    // Create a pointer to the new position object
+    current = &positionHistory.back();
+
+    // Update the new state with the old one
+    current->key = previous.key;
+    current->castlingRights = previous.castlingRights;
+    current->fiftyRule = previous.fiftyRule;
+    current->pliesFromNull = 0;
+    current->repetition = 0;
+    current->epSquare = SQ_NONE;
+    current->move = Move::none();
+    std::copy(std::begin(previous.nonPawnMaterial), 
+              std::end(previous.nonPawnMaterial), 
+              std::begin(current->nonPawnMaterial));
+
+    if (previous.epSquare != SQ_NONE) 
+        current->key ^= Zobrist::enpassant[file_of(previous.epSquare)];
+
+    current->key ^= Zobrist::side;
+
+    current->fiftyRule++;
+
+    change_side();
+    update();
+}
+
+void Position::undo_null() {
+    change_side();
+    positionHistory.pop_back();
+    current = &positionHistory.back();
+}
+
 // Tests if a position draws by repetition or by 50-move rule
 bool Position::is_draw() const {
     // Fifty move rule on draws if no checks

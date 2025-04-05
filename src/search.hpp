@@ -49,6 +49,7 @@ struct SearchData {
     Move bestMove;
 
     // Heuristics
+    Depth nmpMinPly;
     Value rootDelta;
     Move extMove;
 

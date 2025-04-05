@@ -31,9 +31,10 @@ void SearchData::clear() {
 
     ply = 0;
     rootDepth = 0;
-    stop = false;
     nodes = 0;
     selDepth = 0;
+    nmpMinPly = 0;
+    stop = false;
     score = -VALUE_INFINITE;
     bestMove = Move::none();
     extMove = Move::none();
@@ -377,6 +378,40 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         && sd->extMove.is_none()
         && ttMove.is_none())
         return eval;
+
+    // Null move pruning
+    if (!inCheck
+        && !pvNode
+        && sd->extMove.is_none()
+        && !pos->gamestate()->move.is_none()
+        && eval >= beta
+        && standpat >= beta + 400
+        && pos->non_pawn_material(us)
+        && !is_loss(beta)
+        && sd->ply >= sd->nmpMinPly) {
+
+        // Setup depth reductions
+        Depth nmpReduction = std::min((eval - beta) / 200, 6) + depth / 3 + 5;
+
+        // Make the null move
+        pos->do_null();
+        Value val = -alphabeta<NON_PV>(pos, sd, -beta, 1 - beta, depth - nmpReduction);
+        pos->undo_null();
+
+        // Do not return unproven winning scores
+        if (val >= beta && !is_win(val)) {
+            assert(!sd->nmpMinPly);
+            if (sd->nmpMinPly || depth < 10) return val;
+
+            // Perform a verification serach at higher depth
+            sd->nmpMinPly = sd->ply + 3 * (depth - nmpReduction) / 4;
+            Value v = alphabeta<NON_PV>(pos, sd, beta - 1, beta, depth - nmpReduction);
+            sd->nmpMinPly = 0;
+
+            // If value still fails high we can safely return the original
+            if (v >= beta) return val;
+        }
+    }
 
     // Create move generator
     Generator gen(pos, hist, PV_SEARCH, ttMove, sd->ply);
