@@ -47,6 +47,7 @@ struct SearchData {
     Depth selDepth;
     Value score;
     Move bestMove;
+    std::vector<RootMove> rootMoves;
 
     // Heuristics
     Depth nmpMinPly;
@@ -69,9 +70,6 @@ private:
     // Store each thread and it's relevent data
     std::vector<std::thread> threads;
     std::vector<SearchData> threadData;
-
-    // Store the rootmoves of the position
-    std::vector<RootMove> rootMoves;
 
     // Depths for lmr
     Depth lmr[MAX_PLY][MAX_MOVES];

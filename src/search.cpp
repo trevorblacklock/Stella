@@ -175,7 +175,7 @@ Move Search::search(Position* pos, TimeManager* manager, int id) {
 
         // Loop through the moves
         while ((m = gen.next_best<LEGAL>()) != Move::none())
-            rootMoves.emplace_back(RootMove(m));
+            threadData[0].rootMoves.emplace_back(RootMove(m));
 
         // Setup the time manager
         tm = manager;
@@ -205,10 +205,9 @@ Move Search::search(Position* pos, TimeManager* manager, int id) {
     Value alpha = -VALUE_INFINITE;
     Value beta = VALUE_INFINITE;
 
-    sd->rootDelta = beta - alpha;
-
     // Main iterative deepening loop
     for (Depth depth = 1; depth <= maxDepth; ++depth) {
+        int failedHigh = 0;
         // Reset the pv table
         sd->pvTable.reset();
         // Reset seldepth for this loop
@@ -216,17 +215,69 @@ Move Search::search(Position* pos, TimeManager* manager, int id) {
         // Set the root depth
         sd->rootDepth = depth;
 
-        // Run the search
-        score = alphabeta<PV>(&newPos, sd, alpha, beta, depth);
+        Value delta = 15 + average * average / 10000;
+        Value alpha = std::clamp(average - delta, 
+                                 static_cast<int>(-VALUE_INFINITE), 
+                                 static_cast<int>(VALUE_INFINITE));
+        Value beta = std::clamp(average + delta, 
+                                static_cast<int>(-VALUE_INFINITE), 
+                                static_cast<int>(VALUE_INFINITE));
 
-        // Set this score in the search data
-        sd->score = score;
+        while (tm->can_continue()) {
+            // Set a new depth and update the root depth
+            Depth newDepth = std::max(1, depth - failedHigh);
+            // Adjust root depth
+            sd->rootDepth = newDepth;
+            sd->rootDelta = beta - alpha;
 
-        // Check for a stop
+            // Find the bestmove if it exists
+            if (!sd->bestMove.is_none() && score != -VALUE_INFINITE) {
+                auto& rm = *std::find(sd->rootMoves.begin(), sd->rootMoves.end(), sd->bestMove);
+                average = rm.averageScore;
+            }
+
+            // Run the search
+            score = alphabeta<PV>(&newPos, sd, alpha, beta, depth);
+
+            // Set this score in the search data
+            sd->score = score;
+
+            // Set the previous scores
+            for (auto& rm : sd->rootMoves) {
+                rm.previousScore = rm.currentScore;
+            }
+
+            // Check for a stop
+            if (tm->forceStop) break;
+
+            // If no stop can print out info strings for this depth
+            if (mainThread && this->infoStrings && tm->elapsed() >= 3000) {
+                if (score >= beta) print_info_string<BOUND_LOWER>();
+                if (score <= alpha) print_info_string<BOUND_UPPER>();
+            }
+
+            if (score <= alpha) {
+                beta = (alpha + beta) / 2;
+                alpha = std::max(score - delta, static_cast<int>(-VALUE_INFINITE));
+                failedHigh = 0;
+            }
+
+            else if (score >= beta) {
+                beta = std::min(score + delta, static_cast<int>(VALUE_INFINITE));
+                failedHigh++;
+            }
+
+            else break;
+
+            delta += delta / 3;
+
+            assert(alpha >= -VALUE_INFINITE && alpha <= VALUE_INFINITE);
+            assert(beta >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
+        }
+        
         if (!tm->can_continue()) break;
 
-        // If no stop can print out info strings for this depth
-        if (mainThread && this->infoStrings)
+        if (this->infoStrings && mainThread)
             print_info_string<BOUND_NONE>();
     }
 
@@ -520,7 +571,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
             && depth >= 8
             && sd->extMove.is_none()
             && m == ttMove
-            && sd->ply > 0
+            && root
             && entry->depth() >= depth - 3
             && ttScore != VALUE_NONE
             && !is_extremity(ttScore)
@@ -633,6 +684,18 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         // Increment the legal moves
         legalMoves++;
+
+        // If not at root depth we can calculate new averages for root moves
+        if (root) {
+            auto& rm = *std::find(sd->rootMoves.begin(), sd->rootMoves.end(), m);
+            rm.averageScore = (rm.averageScore != -VALUE_INFINITE) ? (2 * score + rm.averageScore) / 3 : score;
+
+            // Update the score
+            if (moveCnt == 1 || score > alpha) 
+                rm.currentScore = score;
+            else
+                rm.currentScore = -VALUE_INFINITE;
+        }
 
         // If new best score found, update the score and best move
         if (score > bestScore) {
