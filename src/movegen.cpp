@@ -27,15 +27,25 @@ Move Generator::next() {
 
         // Run through good captures
         case GOOD_CAPTURES:
-            // If in qsearch mode exit
-            if (mode == QSEARCH) {
-                if (captureIdx < captures.size) return next_best<CAPTURES>();
-                break;
-            }
             // Loop through all the good captures
             if (captureIdx < goodCaptures) return next_best<CAPTURES>();
-            // Increment the stage
+            // If in a non-check qsearch we can break here
+            if (mode == QSEARCH) break;
+            // If in check under a qsearch, visit all the captures
+            if (mode == QSEARCH_CHECK) generationStage = BAD_CAPTURES;
+            // Otherwise Increment the stage normally
+            else ++generationStage;
+            [[fallthrough]];
+        
+        // Use first killer index
+        case KILLER1:
             ++generationStage;
+            if (pos->is_pseudolegal(killer1)) return killer1;
+            [[fallthrough]];
+
+        case KILLER2:
+            ++generationStage;
+            if (pos->is_pseudolegal(killer2)) return killer2;
             [[fallthrough]];
 
         // Initialize the quiets
@@ -58,14 +68,15 @@ Move Generator::next() {
         case BAD_CAPTURES:
             // Loop through the rest of the captures
             if (captureIdx < captures.size) return next_best<CAPTURES>();
-            // Increment the stage
-            ++generationStage;
+            // If in check under a qsearch we also generate evasions
+            if (mode == QSEARCH_CHECK) generationStage = INIT_EVASIONS;
+            // Otherwise Increment the stage normally
+            else ++generationStage;
             [[fallthrough]];
 
         // Get the bad quiets
         case BAD_QUIETS:
             // Increment the stage
-            ++generationStage;
             break;
 
         // Initialize the evasions
@@ -80,7 +91,6 @@ Move Generator::next() {
         case ALL_EVASIONS:
             // Return the next evasion move which is stored as a quiet
             if (quietIdx < quiets.size) return next_best<QUIETS>();
-            if (captureIdx < captures.size) return next_best<CAPTURES>();
             // Break out of loop once all evasions are searched
             break;
     }
@@ -110,11 +120,17 @@ Generator::Generator(Position* p, History* h, GenerationMode m, Move tt, int sea
     side = pos->side();
     ply = searchPly;
     // Set the generation stage
-    generationStage = m == QSEARCH_CHECK ? INIT_EVASIONS : TT_MOVE;
+    generationStage = TT_MOVE;
     // Store the tt move
     ttMove = tt;
     // Set the generation mode
     mode = m;
+    // Set the killer moves
+    killer1 = hist->get_killer(side, ply, 0);
+    killer2 = hist->get_killer(side, ply, 1);
+    // Set killers to none if they equal the ttMove
+    killer1 = (killer1 == ttMove || mode == QSEARCH_CHECK) ? Move::none() : killer1;
+    killer2 = (killer2 == ttMove || mode == QSEARCH_CHECK) ? Move::none() : killer2;
     // Generate the mask
     generate_mask();
 }
@@ -206,16 +222,10 @@ inline void Generator::add_move(Move m) {
     // Check the move is ok
     assert(m.is_ok());
 
-    // For legal generation type don't bother with scoring
-    if (mode == PERFT) {
-        // Check the move is legal before adding it
-        if (pos->is_legal(m)) {
-            if (T == CAPTURES) captures.moves[captures.size++] = m;
-            if (T == QUIETS || T == EVASIONS) quiets.moves[quiets.size++] = m;
-        }
-    }
-    // First check that the move is not the tt move
-    else if (m != ttMove) {
+    if (mode != PERFT) {
+        // Ensure move is not the ttMove
+        if (m == ttMove) return;
+        // Add the moves now
         if (T == CAPTURES) {
             // Get the static exchange evaluation of this move
             Value score = pos->see(m);
@@ -233,10 +243,21 @@ inline void Generator::add_move(Move m) {
             captures.scores[captures.size] = score;
             captures.moves[captures.size++] = m;
         }
-        else if (T == QUIETS || T == EVASIONS) {
+        else {
+            // First ensure move is not a killer
+            if (m == killer1 || m == killer2) return;
             // Add this move to the quiets list
             quiets.scores[quiets.size] = hist->get_history(pos, m, ply);
             quiets.moves[quiets.size++] = m;
+        }
+    }
+
+    // For legal generation type don't bother with scoring
+    else {
+        // Check the move is legal before adding it
+        if (pos->is_legal(m)) {
+            if (T == CAPTURES) captures.moves[captures.size++] = m;
+            else quiets.moves[quiets.size++] = m;
         }
     }
 }
@@ -421,7 +442,7 @@ inline void Generator::generate_piece(PieceType pt) {
             // Now determine if castling is possible on queenside
             if (pos->can_castle(queenRights) && !pos->castling_blocked(queenRights))
                 add_move<QUIETS>(Move(from, pos->castle_rook_square(queenRights), CASTLING));
-            }
+        }
 
         // Return once finished with king moves to not generate other moves on accident
         return;
@@ -458,7 +479,6 @@ inline void Generator::generate() {
         generate<QUIETS>();
     }
     else if (T == EVASIONS) {
-        generate<CAPTURES>();
         generate<QUIETS>();
     }
     else if (T == CAPTURES || T == QUIETS) {

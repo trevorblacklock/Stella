@@ -22,6 +22,8 @@ enum GenerationStage {
     TT_MOVE,
     INIT_CAPTURES,
     GOOD_CAPTURES,
+    KILLER1,
+    KILLER2,
     INIT_QUIETS,
     GOOD_QUIETS,
     BAD_CAPTURES,
@@ -50,6 +52,9 @@ private:
     MoveList captures;
     MoveList quiets;
     MoveList searched;
+    // Store the killer moves for the position
+    Move killer1;
+    Move killer2;
     // Store the see scores for a given move
     Value seeScore[MAX_MOVES];
     // Store the see score for the current move in the generator,
