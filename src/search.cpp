@@ -368,6 +368,16 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     else {
         standpat = eval = pos->evaluate();
     }
+
+    // Razoring
+    if (!inCheck
+        && !pvNode
+        && depth <= 3
+        && eval + 200 * depth < beta
+        && sd->extMove.is_none()) {
+        Value v = qsearch<nodeType>(pos, sd, alpha, beta);
+        if (v < beta) return v;
+    }
     
     // Futility pruning
     if (!inCheck
