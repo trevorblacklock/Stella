@@ -905,7 +905,7 @@ void update_continuation_histories(Position* pos, History* hist,
         if (pos->checks() && i > 2) 
             break;
         if (pos->previous(i).move.is_ok()) {
-            hist->update_continuation(pc, to, ply - i, bonus / (1 + 3 * (i == 3)));
+            hist->update_continuation(pc, to, ply - i, bonus);
         }
     }
 }
