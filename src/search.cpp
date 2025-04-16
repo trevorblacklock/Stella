@@ -264,13 +264,13 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     assert(alpha >= -VALUE_INFINITE);
     assert(beta <= VALUE_INFINITE);
     assert(beta > alpha);
-    assert(depth >= 0 && depth < MAX_PLY);
+    assert(depth >= 0 && depth <= MAX_PLY);
 
     // Set the pv length to zero
     sd->pvTable[sd->ply].reset();
 
     // Check if depth is zero, if true then return an evaluation
-    if (depth <= 0) return qsearch<nodeType>(pos, sd, alpha, beta);
+    if (depth <= 0 || sd->ply >= MAX_PLY || depth >= MAX_PLY) return qsearch<nodeType>(pos, sd, alpha, beta);
 
     // Check for a force stop
     if (tm->forceStop) {
@@ -424,20 +424,22 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         // Setup depth reductions
         Depth nmpReduction = std::min((eval - beta) / 200, 6) + depth / 3 + 5;
+	Depth nmpDepth = std::max(0, depth - nmpReduction);
 
         // Make the null move
         pos->do_null();
-        Value val = -alphabeta<NON_PV>(pos, sd, -beta, 1 - beta, depth - nmpReduction);
+        Value val = -alphabeta<NON_PV>(pos, sd, -beta, 1 - beta, depth - nmpDepth);
         pos->undo_null();
 
         // Do not return unproven winning scores
         if (val >= beta && !is_win(val)) {
-            assert(!sd->nmpMinPly);
             if (sd->nmpMinPly || depth < 10) return val;
 
-            // Perform a verification serach at higher depth
+            assert(!sd->nmpMinPly);
+            
+	    // Perform a verification serach at higher depth
             sd->nmpMinPly = sd->ply + 3 * (depth - nmpReduction) / 4;
-            Value v = alphabeta<NON_PV>(pos, sd, beta - 1, beta, depth - nmpReduction);
+            Value v = alphabeta<NON_PV>(pos, sd, beta - 1, beta, depth - nmpDepth);
             sd->nmpMinPly = 0;
 
             // If value still fails high we can safely return the original
@@ -874,7 +876,6 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     // If there are no moves, just return a base evaluation
     if (inCheck && bestScore == -VALUE_INFINITE) {
         assert(!moveCnt);
-        assert(!Generator(pos).count<LEGAL>());
         return mated_in(sd->ply);
     }
 
