@@ -428,7 +428,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         // Make the null move
         pos->do_null();
-        Value val = -alphabeta<NON_PV>(pos, sd, -beta, 1 - beta, depth - nmpDepth);
+        Value val = -alphabeta<NON_PV>(pos, sd, -beta, 1 - beta, nmpDepth);
         pos->undo_null();
 
         // Do not return unproven winning scores
@@ -439,7 +439,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
             
 	    // Perform a verification serach at higher depth
             sd->nmpMinPly = sd->ply + 3 * (depth - nmpReduction) / 4;
-            Value v = alphabeta<NON_PV>(pos, sd, beta - 1, beta, depth - nmpDepth);
+            Value v = alphabeta<NON_PV>(pos, sd, beta - 1, beta, nmpDepth);
             sd->nmpMinPly = 0;
 
             // If value still fails high we can safely return the original
