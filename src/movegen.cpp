@@ -53,7 +53,7 @@ Move Generator::next() {
             // Increment the stage
             ++generationStage;
             // Generate all quiet moves
-            generate<QUIETS>();
+            if (!skipQuiets) generate<QUIETS>();
             [[fallthrough]];
 
         // Get the good quiets

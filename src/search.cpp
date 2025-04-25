@@ -23,12 +23,8 @@ SearchData::SearchData() {}
 // Clear SearchData
 template<bool full>
 void SearchData::clear() {
-
-    if (full) {
-        pvTable.reset();
-        hist.clear();
-    }
-
+    if (full) hist.clear();
+    pvTable.reset();
     ply = 0;
     rootDepth = 0;
     nodes = 0;
@@ -140,6 +136,14 @@ void Search::init_lmr() {
 
 Depth Search::reductions(Depth depth, int legalMoves, Value delta, Value rootDelta) {
     return lmr[depth][legalMoves] + 1.5 - delta / rootDelta;
+}
+
+int stat_bonus(int depth) {
+    return std::min(300 * depth - 250, 1500);
+}
+
+int stat_malus(int depth) {
+    return std::min(350 * depth - 200, 1700);
 }
 
 // Main search function called from Uci.
@@ -270,7 +274,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     sd->pvTable[sd->ply].reset();
 
     // Check if depth is zero, if true then return an evaluation
-    if (depth <= 0 || sd->ply >= MAX_PLY || depth >= MAX_PLY) return qsearch<nodeType>(pos, sd, alpha, beta);
+    if (depth <= 0 || sd->ply >= MAX_PLY || depth >= MAX_PLY) 
+        return qsearch<nodeType>(pos, sd, alpha, beta);
 
     // Check for a force stop
     if (tm->forceStop) {
@@ -295,6 +300,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     // Get all search info needed
     bool  inCheck   = pos->checks();
     bool  found     = false;
+    bool  improving = false;
     Key   key       = pos->key();
     Value bestScore = -VALUE_INFINITE;
     Value score     = -VALUE_INFINITE;
@@ -346,16 +352,13 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         && (entry->node() & (ttScore >= beta ? BOUND_LOWER : BOUND_UPPER))) {
 
         // If the ttMove is quiet, update move sorting heuristics
-        if (!ttMove.is_none() && ttScore >= beta) {
-            // Bonus for quiet ttMove that fails high
-            if (!pos->is_capture(ttMove))
-                update_quiet_stats(pos, hist, sd->ply, ttMove, 
-                                   std::min(120 * depth - 75, 1250));
-
-            // Extra penalty for early quiet moves of the previous ply
-            if (prevSq != SQ_NONE && pos->previous().capturedPiece) {
-                update_continuation_histories(pos, hist, sd->ply, pos->piece_on(prevSq), 
-                                              prevSq, -std::min(800 * depth - 250, 3000));
+        if (!ttMove.is_none()) {
+            if (!pos->is_capture(ttMove) && !pos->is_promotion(ttMove)) {
+                if (ttScore >= beta)
+                    update_quiet_stats(pos, hist, sd->ply, ttMove, stat_bonus(depth));
+                else
+                    update_continuation_histories(pos, hist, sd->ply, pos->piece_moved(ttMove), 
+                                                  ttMove.to(), -stat_malus(depth));
             }
         }
 
@@ -367,8 +370,6 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     if (inCheck) {
         standpat = eval = -VALUE_MATE + sd->ply;
     }
-    else if (!sd->extMove.is_none())
-        standpat = eval = pos->evaluate();
     // For found transposition entries, try to find the standpat from there.
     else if (found) {
         standpat = eval = entry->eval();
@@ -388,8 +389,10 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
     // Set the historic eval with the standpat, rather than the
     // potentially adjusted eval from the hashtable.
-    hist->set_eval(us, sd->ply, standpat);
-    bool improving = hist->is_improving(us, sd->ply, standpat);
+    if (!inCheck) {
+        hist->set_eval(us, sd->ply, standpat);
+        improving = hist->is_improving(us, sd->ply, standpat);
+    }
 
     // Razoring
     if (!inCheck
@@ -417,14 +420,14 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         && sd->extMove.is_none()
         && !pos->gamestate()->move.is_none()
         && eval >= beta
-        && standpat >= beta + 400
+        && standpat >= beta - 15 * depth - 200 * improving
         && pos->non_pawn_material(us)
         && !is_loss(beta)
         && sd->ply >= sd->nmpMinPly) {
 
         // Setup depth reductions
         Depth nmpReduction = std::min((eval - beta) / 200, 6) + depth / 3 + 5;
-	Depth nmpDepth = std::max(0, depth - nmpReduction);
+	      Depth nmpDepth = std::max(0, depth - nmpReduction);
 
         // Make the null move
         pos->do_null();
@@ -433,11 +436,11 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         // Do not return unproven winning scores
         if (val >= beta && !is_win(val)) {
-            if (sd->nmpMinPly || depth < 10) return val;
+            if (sd->nmpMinPly || depth < 14) return val;
 
             assert(!sd->nmpMinPly);
             
-	    // Perform a verification serach at higher depth
+	          // Perform a verification serach at higher depth
             sd->nmpMinPly = sd->ply + 3 * (depth - nmpReduction) / 4;
             Value v = alphabeta<NON_PV>(pos, sd, beta - 1, beta, nmpDepth);
             sd->nmpMinPly = 0;
@@ -481,6 +484,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         Value reduction = reductions(depth, legalMoves, beta - alpha, sd->rootDelta);
         Depth extension = 0;
+
+        moveCnt++;
 
         // Move pruning
         if (sd->ply
@@ -552,19 +557,11 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
             // yet the branch is not pruned since it does not exceed beta
             // we can reduce the ttMove in favor of other moves.
             else if (ttScore >= beta)
-                extension = -3;
-
-            // If the score we found exceeds the ttScore, we can reduce
-            // the ttMove since other moves are just as capable
-            if (ttScore <= score)
-                extension = -1;
+                extension = -2 - !pvNode;
         }
 
         // Set the next depth to search
         Depth newDepth = depth - 1 + extension;
-
-        // Increment the move counter
-        moveCnt++;
 
         Value history;
 
@@ -584,12 +581,12 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         reduction += std::min(2, std::abs(eval - alpha) / 400);
         reduction -= hist->is_killer(us, m, sd->ply);
-        reduction -= pvNode;
+        reduction -= 2 * pvNode;
         reduction -= improving;
         reduction -= 2 * (m == ttMove);
-        reduction -= history / 15000;
+        reduction -= history / 10000;
 
-        Depth reducedDepth = std::clamp(newDepth - reduction, 0, newDepth + 1);
+        Depth reducedDepth = std::clamp(newDepth - reduction, 1, newDepth + 1);
 
         // Send information about the current move if enough time has passed
         if (root && mainThread && infoStrings && !tm->forceStop && tm->elapsed() > 3000) {
@@ -607,22 +604,54 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         // Increment the ply counter
         sd->ply++;
-
-        // Principle Variation Search (PVS)
-        if (legalMoves == 0)
-            score = -alphabeta<PV>(pos, sd, -beta, -alpha, newDepth);
-        else {
+        
+        // Search with Late Move Redcutions
+        // The conditions to enter LMR are simple, and the idea
+        // is to search moves we can preemptively consider "bad"
+        // at lower depths while not expecting much. If the node
+        // raises the value of alpha, it induces a re-search since
+        // the move was better than originally thought, and
+        // move histories can then be updated accordingly
+        // based on a more thourough search.
+        if (sd->ply > 1
+            && depth >= 2
+            && moveCnt > 1) {
+            
+            // Do the serach with reductions
             score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, reducedDepth);
-            // Do a full re-search if score is with alpha and beta bounds
-            if (reducedDepth < newDepth && score > alpha) {
+
+            // Perform another search if the last score fails high with an actual
+            // reduction
+            if (score > alpha && reducedDepth < newDepth) {
                 score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, newDepth);
 
-                // Post LMR continuation histories update
-                update_continuation_histories(pos, hist, sd->ply, pc, to, 1600);
+                // Find a bonus to update continuation histories
+                int bonus = score <= alpha ? -stat_malus(newDepth)
+                          : score >= beta ? stat_bonus(newDepth) : 0;
+
+                if (bonus)
+                    update_continuation_histories(pos, hist, sd->ply, pc, to, bonus);
             }
-            if (score > alpha && score < beta)
-                score = -alphabeta<PV>(pos, sd, -beta, -alpha, newDepth);
         }
+
+        // When the conditions for LMR are not met, we can enter a 
+        // regular full-depth search
+        else if (!pvNode || moveCnt > 1) {
+            // Increase the reductions if ttMove is missing
+            reduction += ttMove.is_none();
+            score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, 
+                                       newDepth - (reduction > 3) - (reduction > 5 && newDepth > 2));
+        }
+
+        // Lastly, for PV nodes we do a full search (sometimes a re-search)
+        // called a Principle Variation Search (PVS) which is usually
+        // the most computationally dependent, so we make sure the
+        // score from previous searches atleast raises alpha to not
+        // needlessly waste a search on an already known "bad" move.
+        if (pvNode && (moveCnt == 1 || score > alpha)) {
+            score = -alphabeta<PV>(pos, sd, -beta, -alpha, newDepth);
+        }
+
         // Ensure the score falls within bounds
         assert(score > -VALUE_INFINITE && score < VALUE_INFINITE);
 
@@ -636,6 +665,9 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         // Increment the legal moves
         legalMoves++;
 
+        // If the search stopped we cannot trust the return value of the search
+        if (!tm->can_continue()) return beta;
+
         // If new best score found, update the score and best move
         if (score > bestScore) {
             // Update the scores and moves
@@ -643,11 +675,11 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
             bestMove = m;
 
             // If at a low depth and can continue set the best move
-            if (root && tm->can_continue())
+            if (root)
                 sd->bestMove = m;
 
             // Update the pv at pv nodes
-            if (pvNode && mainThread && !tm->forceStop)
+            if (pvNode && mainThread)
                 sd->pvTable.update(m, sd->ply);
 
             // Check for a beta cutoff
@@ -670,7 +702,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     // If there are no legal moves then its either stalemate of checkmate.
     // Can figure it out from knowing if we are in currently in check
     if (legalMoves == 0) {
-        return inCheck ? mated_in(sd->ply) : VALUE_DRAW;
+        return !sd->extMove.is_none() ? alpha : inCheck ? mated_in(sd->ply) : VALUE_DRAW;
     }
     // Ensure the score falls within bounds
     assert(bestScore > -VALUE_INFINITE && bestScore < VALUE_INFINITE);
@@ -721,6 +753,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     // Get all search info needed
     bool  found     = false;
     bool  inCheck   = pos->checks();
+    Depth ttDepth   = 0;
     Key   key       = pos->key();
     Value bestScore = -VALUE_INFINITE;
     Value score     = -VALUE_INFINITE;
@@ -778,6 +811,10 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
 
         // Check for an early cutoff
         if (bestScore >= beta) {
+            // If not already in the hashtable, we can add it now
+            if (!found)
+                table.save<NON_PV>(key, 0, value_to_tt(bestScore, sd->ply), 
+                                   standpat, Move::none(), BOUND_NONE);
             // Return the score now
             return bestScore;
         }
@@ -787,6 +824,9 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
             alpha = bestScore;
         }
     }
+
+    // If at max ply, we just return the bestscore
+    if (sd->ply >= MAX_PLY) return bestScore;
 
     Square prevSq = pos->previous().move.is_ok() ? pos->previous().move.to() : SQ_NONE;
 
@@ -863,13 +903,18 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
         if (score > bestScore) {
             // Update the bestscore
             bestScore = score;
-            bestMove = m;
-
-            // Check for beta cutoff
-            if (score < beta)
-                alpha = score;
-            else
-                break;
+            
+            if (score > alpha) {
+                bestMove = m;
+                
+                // Check for beta cutoff
+                if (score < beta)
+                    alpha = score;
+                else {
+                    ttDepth = givesCheck;
+                    break;
+                }
+            }        
         }
     }
 
@@ -884,19 +929,11 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     // If there is moves, store the best value in the transposition table.
     // The depth is determined by if there is a beta cutoff and in check.
     if (!bestMove.is_none())
-        table.save<nodeType>(key, 0, value_to_tt(bestScore, sd->ply), standpat, bestMove,
+        table.save<nodeType>(key, ttDepth, value_to_tt(bestScore, sd->ply), standpat, bestMove,
                              bestScore >= beta ? BOUND_LOWER : BOUND_UPPER);
 
     // Return the best score
     return bestScore;
-}
-
-int stat_bonus(int depth) {
-    return std::min(150 * depth - 90, 1500);
-}
-
-int stat_malus(int depth) {
-    return std::min(700 * depth - 200, 2500);
 }
 
 void update_continuation_histories(Position* pos, History* hist, 
