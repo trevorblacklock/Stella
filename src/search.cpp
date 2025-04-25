@@ -268,7 +268,6 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     assert(alpha >= -VALUE_INFINITE);
     assert(beta <= VALUE_INFINITE);
     assert(beta > alpha);
-    assert(depth >= 0 && depth <= MAX_PLY);
 
     // Set the pv length to zero
     sd->pvTable[sd->ply].reset();
@@ -276,6 +275,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     // Check if depth is zero, if true then return an evaluation
     if (depth <= 0 || sd->ply >= MAX_PLY || depth >= MAX_PLY) 
         return qsearch<nodeType>(pos, sd, alpha, beta);
+
+    assert(depth >= 0 && depth <= MAX_PLY);
 
     // Check for a force stop
     if (tm->forceStop) {
@@ -397,22 +398,19 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     // Razoring
     if (!inCheck
         && !pvNode
-        && depth <= 3
-        && eval + 200 * depth < beta
-        && sd->extMove.is_none()) {
-        Value v = qsearch<nodeType>(pos, sd, alpha, beta);
-        if (v < beta) return v;
-    }
+        && eval < alpha - 500 - 300 * depth * depth)
+        return qsearch<nodeType>(pos, sd, alpha, beta);
     
     // Futility pruning
     if (!inCheck
         && !pvNode
-        && depth < 8
+        && depth < 10
         && eval - depth * 100 >= beta
         && !is_win(eval)
+        && !is_loss(beta)
         && sd->extMove.is_none()
         && ttMove.is_none())
-        return eval;
+        return beta + (eval - beta) / 3;
 
     // Null move pruning
     if (!inCheck
@@ -427,7 +425,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
 
         // Setup depth reductions
         Depth nmpReduction = std::min((eval - beta) / 200, 6) + depth / 3 + 5;
-	      Depth nmpDepth = std::max(0, depth - nmpReduction);
+        Depth nmpDepth = std::max(0, depth - nmpReduction);
 
         // Make the null move
         pos->do_null();
@@ -449,6 +447,10 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
             if (v >= beta) return val;
         }
     }
+    
+    // Internal iterative deepening
+    if (!inCheck && depth >= 4 && ttMove.is_none() && pvNode)
+        depth -= 2;
 
     // Create move generator
     Generator gen(pos, hist, PV_SEARCH, ttMove, sd->ply);
@@ -496,15 +498,9 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
             // Crude depth estimation
             Depth moveDepth = std::max(1, depth - 1 - reduction);
             
-            // Quiet move pruning 
-            if (quiet) {
-                // Check if we can prune out remaining quiet moves
-                if (gen.can_skip_quiets()) continue;
-
-                // If the number of searched quiets is high enough, we can skip
-                // the rest, since move ordering dictates they will likely not be good
-                if (moveCnt >= quietPruning) gen.skip_quiets();
-            }
+            // If the number of searched moves is high enough, we can skip
+            // the quiets, since move ordering dictates they will likely not be good
+            if (moveCnt >= quietPruning) gen.skip_quiets();
 
             if (isCapture || givesCheck) {
                 // Get the capture history
@@ -568,7 +564,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         if (isCapture)
             history = 10 * piece_value(pos->piece_on(to)).mid
                     + hist->get_capture(pc, to, piece_type(pos->piece_on(to)))
-                    - 4000;
+                    - 5000;
         else if (inCheck)
             history = hist->get_butterfly(us, m)
                     + hist->get_continuation(pc, to, sd->ply - 1)
@@ -613,10 +609,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         // the move was better than originally thought, and
         // move histories can then be updated accordingly
         // based on a more thourough search.
-        if (sd->ply > 1
-            && depth >= 2
-            && moveCnt > 1) {
-            
+        if (depth >= 2 && moveCnt > 1) {   
             // Do the serach with reductions
             score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, reducedDepth);
 
@@ -866,7 +859,8 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
                     continue;
 
                 // If static exchange is low we can prune
-                if (pos->see(m) <= alpha - standpat - 400) 
+                Value see = isCapture ? gen.see_value() : pos->see(m);
+                if (see <= alpha - standpat - 400) 
                     continue;
             }
 
@@ -876,7 +870,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
 
             // Static exchange evaluation based pruning
             if (validSee) {
-                Value see = validSee ? pos->see(m) : 0;
+                Value see = validSee ? gen.see_value() : 0;
                 // Values under zero represent bad captures
                 if (see < -50) continue;
             }
