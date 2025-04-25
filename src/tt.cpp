@@ -30,13 +30,19 @@ void TTtable::save(Key key, Depth depth, Value score, Value eval, Move m, Bound 
     assert(depth >= 0 && depth <= MAX_PLY);
     // Make sure scores are within bounds
     assert(score > -VALUE_INFINITE && score < VALUE_INFINITE);
-    // Make sure bound exists
-    assert(b != BOUND_NONE);
     // Ensure entry is not null
     assert(entry);
 
-    // Update entry info if empty
-    if (entry->key32 == 0) {
+    // Keep the existing move if none is given
+    if (m.is_none()) m = entry->move16;
+
+    // Check for a possible replacement
+    // Go from least expensive to most when checking for replacement conditions
+    if (b == BOUND_EXACT
+        || entry->key32 != static_cast<uint32_t>(key)
+        || entry->age8 != generation
+        || entry->depth8 <= depth) {
+
         // Fill the entry
         entry->key32 = static_cast<uint32_t>(key);
         entry->score16 = static_cast<int16_t>(score);
@@ -45,25 +51,6 @@ void TTtable::save(Key key, Depth depth, Value score, Value eval, Move m, Bound 
         entry->depth8 = static_cast<uint8_t>(depth);
         entry->node8 = static_cast<uint8_t>(static_cast<bool>(T) << 2 | b);
         entry->age8 = static_cast<uint8_t>(generation);
-    }
-
-    // Check for a possible replacement
-    else {
-        // Go from least expensive to most when checking for replacement conditions
-        if (b == BOUND_EXACT
-        || entry->age8 != generation
-        || entry->depth8 <= depth
-        || (entry->key32 == static_cast<uint32_t>(key) && entry->depth8 <= depth + 3)) {
-
-            // Fill the entry
-            entry->key32 = static_cast<uint32_t>(key);
-            entry->score16 = static_cast<int16_t>(score);
-            entry->eval16 = static_cast<int16_t>(eval);
-            entry->move16 = static_cast<Move>(m);
-            entry->depth8 = static_cast<uint8_t>(depth);
-            entry->node8 = static_cast<uint8_t>(static_cast<bool>(T) << 2 | b);
-            entry->age8 = static_cast<uint8_t>(generation);
-        }
     }
 }
 
