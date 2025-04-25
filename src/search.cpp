@@ -177,6 +177,9 @@ Move Search::search(Position* pos, TimeManager* manager, int id) {
         Generator gen(pos);
         Move m;
 
+        // Clear old root moves
+        rootMoves.clear();
+
         // Loop through the moves
         while ((m = gen.next_best<LEGAL>()) != Move::none())
             rootMoves.emplace_back(RootMove(m));
@@ -203,13 +206,7 @@ Move Search::search(Position* pos, TimeManager* manager, int id) {
     Position newPos = *pos;
     SearchData* sd = &threadData[id];
 
-    // Start iterative deepening loop
     Value average = -VALUE_INFINITE;
-
-    Value alpha = -VALUE_INFINITE;
-    Value beta = VALUE_INFINITE;
-
-    sd->rootDelta = beta - alpha;
 
     // Main iterative deepening loop
     for (Depth depth = 1; depth <= maxDepth; ++depth) {
@@ -217,21 +214,71 @@ Move Search::search(Position* pos, TimeManager* manager, int id) {
         sd->pvTable.reset();
         // Reset seldepth for this loop
         sd->selDepth = 0;
-        // Set the root depth
-        sd->rootDepth = depth;
+        // Set failedhigh counter to zero each iteration
+        int failedHigh = 0;
 
-        // Run the search
-        score = alphabeta<PV>(&newPos, sd, alpha, beta, depth);
+        // Use aspiration windows to speed up searches based on recieved scores.
+        // We can use the (weighted) average score to determine values for alpha & beta
+        Value delta = 20 + average * average / 10000;
+        Value alpha = std::clamp(average - delta, -VALUE_INFINITE, +VALUE_INFINITE);
+        Value beta = std::clamp(average + delta, -VALUE_INFINITE, +VALUE_INFINITE);
 
-        // Set this score in the search data
-        sd->score = score;
+        // Iterative deepening until search times out or score falls within aspiration window.
+        while (tm->can_continue()) {
+            // Set a new depth for the search based on the number of previous
+            // searches that failed high.
+            Depth newDepth = std::max(1, depth - failedHigh);
+
+            sd->rootDelta = beta - alpha;
+            sd->rootDepth = newDepth;
+
+            // Find the bestmove and set the iterative average
+            if (!sd->bestMove.is_none() && score != VALUE_INFINITE) {
+                RootMove& rm = *std::find(rootMoves.begin(), rootMoves.end(), sd->bestMove);
+                average = rm.averageScore;
+            }
+
+            // Run the search
+            score = alphabeta<PV>(&newPos, sd, alpha, beta, newDepth);
+
+            // Set previous scores
+            for (RootMove& rm : rootMoves) {
+                rm.previousScore = rm.currentScore;
+            }
+
+            // Set this score in the search data
+            sd->score = score;
+
+            // Check for a stop
+            if (tm->forceStop) break;
+
+            // Check if we must research with a different window
+            if (score <= alpha) {
+                failedHigh = 0;
+                beta = (alpha + beta) / 2;
+                alpha = std::max(score - delta, -VALUE_INFINITE);
+                if (mainThread && infoStrings && tm->elapsed() >= 3000) 
+                    print_info_string<BOUND_UPPER>();
+            }
+
+            else if (score >= beta) {
+                failedHigh++;
+                beta = std::min(score + delta, +VALUE_INFINITE);
+                if (mainThread && infoStrings && tm->elapsed() >= 3000) 
+                    print_info_string<BOUND_LOWER>();
+            }
+
+            else break;
+
+            delta += delta / 3;
+        }
 
         // Check for a stop
         if (!tm->can_continue()) break;
 
         // If no stop can print out info strings for this depth
         if (mainThread && this->infoStrings)
-            print_info_string<BOUND_NONE>();
+            print_info_string<BOUND_NONE>(); 
     }
 
     // When the main thread is finished return the best move
@@ -658,8 +705,17 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         // Increment the legal moves
         legalMoves++;
 
-        // If the search stopped we cannot trust the return value of the search
-        if (!tm->can_continue()) return beta;
+        // If the search stopped we cannot trust the return value
+        if (!tm->can_continue() || tm->forceStop) return beta;
+
+        // Update the rootmoves average score for aspiration windows
+        if (root) {
+            // Find the root move
+            RootMove& rm = *std::find(rootMoves.begin(), rootMoves.end(), m);
+            rm.averageScore = (rm.averageScore != -VALUE_INFINITE) 
+                            ? (2 * score + rm.averageScore) / 3 : score;
+            rm.currentScore = score;
+        }
 
         // If new best score found, update the score and best move
         if (score > bestScore) {
