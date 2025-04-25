@@ -485,4 +485,15 @@ inline void Generator::generate() {
     }
 }
 
+bool Generator::is_contained(Move m) const {
+    // Loop over each movelist
+    for (int i = 0; i < quiets.size; ++i) {
+        if (m == quiets.moves[i]) return true;
+    }
+    for (int i = 0; i < captures.size; ++i) {
+        if (m == captures.moves[i]) return true;
+    }
+    return false;
+}
+
 }

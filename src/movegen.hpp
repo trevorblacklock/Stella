@@ -114,6 +114,8 @@ public:
     void skip_quiets();
     // Read if skipping quiets is true
     bool can_skip_quiets() const;
+    // Debugging tool to verify move exists in move lists
+    bool is_contained(Move m) const;
 
 private:
     // Add a move to the quiet or capture move list and score it
