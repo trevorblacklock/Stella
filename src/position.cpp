@@ -498,18 +498,10 @@ bool Position::is_legal(Move m) const {
 }
 
 // Checks that a move can be made without considering attacks on the king since
-// moves from the transposition table can be corrupted or can be misindexed and
-// not be possible moves in the current position.
+// moves from the transposition table can be corrupted or misindexed.
 bool Position::is_pseudolegal(Move m) const {
     // If move has same from and to square then it is not possible
     if (!m.is_ok()) return false;
-
-    // If move is none, then cant be pseudo legal
-    if (m == Move::none()) return false;
-
-    // Get the from and to square
-    Square from = m.from();
-    Square to = m.to();
 
     // Get the piece moved
     Piece pc = piece_moved(m);
@@ -517,18 +509,22 @@ bool Position::is_pseudolegal(Move m) const {
     // If piece moved is none, then return false
     if (pc == NO_PIECE) return false;
 
-    // Get the type of move
-    MoveType type = m.type();
-
     // Get the side to move
     Color us = side();
     Color them = ~us;
 
-    // Get the captured piece
-    Piece captured = type == EN_PASSANT ? make_piece(them, PAWN) : piece_on(to);
-
     // Make sure moving our own piece
     if (piece_color(pc) != us) return false;
+
+    // Get the from and to square
+    Square from = m.from();
+    Square to = m.to();
+
+    // Get the type of move
+    MoveType type = m.type();
+
+    // Get the captured piece
+    Piece captured = type == EN_PASSANT ? make_piece(them, PAWN) : piece_on(to);
 
     // Make sure capturing one of their pieces
     if (captured != NO_PIECE && piece_color(captured) != them) return false;
@@ -554,40 +550,34 @@ bool Position::is_pseudolegal(Move m) const {
         // Check that non enpassant moves only move in a way a pawn can,
         if (type != EN_PASSANT) {
             // Define pawn pushes
+            bool isDouble = std::abs(to - from) == 16;
+            bool isSingle = std::abs(to - from) == 8;
             Square push = from + pawn_push(us);
-            Square doublePush = push + pawn_push(us);
-
-            // Set the double push to zero if on the second to final relative rank
-            if (relative_rank(us, from) == RANK_7) doublePush = static_cast<Square>(0);
-
-            // Make sure the pawn lands on a legal square
-            if (!((pawn_attacks(us, from) | push | doublePush) & to)) return false;
 
             // For single pawn pushes
-            if (to & push && !is_empty(to)) return false;
+            if (isSingle && !is_empty(to)) return false;
 
             // For double pawn pushes
-            if (to & doublePush && !is_empty(push) && !is_empty(to)) return false;
+            if (isDouble && (!is_empty(push) || !is_empty(to))) return false;
+
+            // Ensure pawn does not move backwards
+            if ((isSingle && to != push) || (isDouble && to != push + pawn_push(us))) return false;
 
             // A double pawn push must land on the fourth rank and start on the second
-            if (to & doublePush && relative_rank(us, from) != RANK_2 && relative_rank(us, to) != RANK_4) return false;
+            if (isDouble && (relative_rank(us, from) != RANK_2 || relative_rank(us, to) != RANK_4)) return false;
 
-            // Only allow captures if the pawn moves diagonally
+            // Make sure non captures are either a single or double push
+            if (captured == NO_PIECE && !isDouble && !isSingle) return false;
+
+            // Make sure captures can only move diagonally
             if (captured != NO_PIECE && !(pawn_attacks(us, from) & to)) return false;
-
-            // Only allow diagonal movement if there is a capture
-            if ((pawn_attacks(us, from) & to) && captured == NO_PIECE) return false;
         }
 
         // Check that enpassant moves land on the correct square
-        if (type == EN_PASSANT && ep_square() != to) return false;
-
-        // Check that enpassant moves land on the correct rank
-        if (type == EN_PASSANT && (piece_on(to - pawn_push(us)) != make_piece(them, PAWN)
-        || relative_rank(us, to) != RANK_6)) return false;
+        else if (ep_square() != to) return false;
 
         // Check that promotions land on the 1st or 8th rank and begin on the 2nd or 7th
-        if (type == PROMOTION && !(rank_of(to) == relative_rank(us, RANK_8) && rank_of(from) == relative_rank(us, RANK_7)))
+        if (type == PROMOTION && (relative_rank(us, to) != RANK_8 || relative_rank(us, from) != RANK_7))
             return false;
     }
 
