@@ -282,7 +282,7 @@ pgo : net obj-clean pgo-clean
 	$(MAKE) ARCH=$(ARCH) EXTRA_FLAGS=$(PRE_PGO_FLAGS) all
 	@echo ""
 	@echo "Step 2/4: Running benchmark.."
-	$(EXE_PGO) "go perft 6" "exit" > bench.out 2>&1
+	$(EXE_PGO) "bench" > bench.out 2>&1
 	tail -n 1 bench.out
 	@echo  ""
 	@echo "Step 3/4: Building optimized executable.."

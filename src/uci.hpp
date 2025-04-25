@@ -51,9 +51,6 @@ public:
     // Write Uci information to stdout.
     void uci();
 
-    // Function to return the static evaluation of a position.
-    void eval();
-
     // Bench function to run a benchmark, used for profile guided optimization and performace testing.
     void bench();
 
