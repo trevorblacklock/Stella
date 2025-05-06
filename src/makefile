@@ -69,7 +69,7 @@ avx512 = no
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wcast-qual -fno-exceptions -pedantic -Wextra -Wshadow -Wmissing-declarations \
 					 -DMINOR_VERSION=$(MINOR) -DMAJOR_VERSION=$(MAJOR) -DEVALFILE=\"$(EVALFILE)\" \
-					 -lpthread -static $(EXTRA_FLAGS)
+					 -lpthread $(EXTRA_FLAGS)
 
 # 2.3 Flags for compiling with PGO enabled
 PRE_PGO_FLAGS = '-fprofile-generate -lgcov'
@@ -168,7 +168,7 @@ endif
 
 # 3.1 Debugging flags
 ifeq ($(debug), yes)
-CXXFLAGS += -g
+CXXFLAGS += -g -fsanitize=address
 else
 CXXFLAGS += -DNDEBUG
 endif
