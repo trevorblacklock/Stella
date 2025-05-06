@@ -357,7 +357,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
     Move  bestMove  = Move::none();
     Move  ttMove    = Move::none();
     History* hist   = &sd->hist;
-    Square prevSq   = pos->previous().move.is_ok() ? pos->previous().move.to() : SQ_NONE;
+    Square prevSq   = sd->ply ? pos->previous().move.is_ok() ? pos->previous().move.to() : SQ_NONE : SQ_NONE;
 
     // Check if a move draws from an upcoming repetition
     if (sd->ply && alpha < VALUE_DRAW && pos->has_game_cycled(sd->ply)) {
@@ -877,7 +877,7 @@ Value Search::qsearch(Position* pos, SearchData* sd, Value alpha, Value beta) {
     // If at max ply, we just return the bestscore
     if (sd->ply >= MAX_PLY) return bestScore;
 
-    Square prevSq = pos->previous().move.is_ok() ? pos->previous().move.to() : SQ_NONE;
+    Square prevSq = sd->ply ? pos->previous().move.is_ok() ? pos->previous().move.to() : SQ_NONE : SQ_NONE;
 
     GenerationMode mode = inCheck ? QSEARCH_CHECK : QSEARCH;
 
@@ -992,7 +992,7 @@ void update_continuation_histories(Position* pos, History* hist,
         // Only update first two if in check
         if (pos->checks() && i > 2) 
             break;
-        if (pos->previous(i).move.is_ok()) {
+        if (pos->previous_ok(i)) {
             hist->update_continuation(pc, to, ply - i, bonus);
         }
     }

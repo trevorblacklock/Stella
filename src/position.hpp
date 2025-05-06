@@ -141,6 +141,8 @@ public:
     PositionInfo  previous(int count) const;
     Key           previous_key() const;
     Key           previous_key(int count) const;
+    bool          previous_ok() const;
+    bool          previous_ok(int count) const;
 
     // Make a move on the board
     template<bool prefetch, bool lazy=true>
@@ -194,12 +196,21 @@ inline Key Position::key() const {
 }
 
 inline PositionInfo Position::previous() const {
-    return positionHistory.rbegin()[1];
+    return previous(1);
 }
 
 inline PositionInfo Position::previous(int count) const {
     assert(count >= 1);
+    assert(positionHistory.size() > count);
     return positionHistory.rbegin()[count];
+}
+
+inline bool Position::previous_ok() const {
+    return previous_ok(1);
+}
+
+inline bool Position::previous_ok(int count) const {
+    return positionHistory.size() > count;
 }
 
 inline CastlingRights Position::castling_rights(Color c) const {
