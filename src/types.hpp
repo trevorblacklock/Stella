@@ -264,6 +264,7 @@ inline void aligned_free(void* ptr) {
 
 // Allow incrementing on piecetypes, squares, files and ranks
 ENABLE_INCREMENT_OPERATORS(PieceType)
+ENABLE_INCREMENT_OPERATORS(Piece)
 ENABLE_INCREMENT_OPERATORS(Square)
 ENABLE_INCREMENT_OPERATORS(File)
 ENABLE_INCREMENT_OPERATORS(Rank)

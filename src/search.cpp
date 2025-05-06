@@ -465,9 +465,11 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         && sd->extMove.is_none()
         && !pos->gamestate()->move.is_none()
         && eval >= beta
+        && eval >= standpat
         && standpat >= beta - 15 * depth - 200 * improving
         && pos->non_pawn_material(us)
         && !is_loss(beta)
+        && !is_win(eval)
         && sd->ply >= sd->nmpMinPly) {
 
         // Setup depth reductions
@@ -626,7 +628,7 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         reduction -= hist->is_killer(us, m, sd->ply);
         reduction -= 2 * pvNode;
         reduction -= improving;
-        reduction -= 2 * (m == ttMove);
+        reduction -= m == ttMove;
         reduction -= history / 10000;
 
         Depth reducedDepth = std::clamp(newDepth - reduction, 1, newDepth + 1);
@@ -679,8 +681,8 @@ Value Search::alphabeta(Position* pos, SearchData* sd,
         else if (!pvNode || moveCnt > 1) {
             // Increase the reductions if ttMove is missing
             reduction += ttMove.is_none();
-            score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, 
-                                       newDepth - (reduction > 3) - (reduction > 5 && newDepth > 2));
+            Depth adjusted = newDepth - (reduction > 3) - (reduction > 5 && newDepth > 2);
+            score = -alphabeta<NON_PV>(pos, sd, -alpha - 1, -alpha, adjusted);
         }
 
         // Lastly, for PV nodes we do a full search (sometimes a re-search)

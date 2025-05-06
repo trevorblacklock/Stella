@@ -220,11 +220,11 @@ inline void Generator::add_move(Move m) {
             // If see is above 0, then consider it a good capture
             if (score >= 0) {
                 goodCaptures++;
-                score = 100000 + hist->get_history(pos, m, ply);
+                score += 100000 + hist->get_history(pos, m, ply);
             }
             // Otherwise its a bad one
             else {
-                score = 1000 + hist->get_history(pos, m, ply);
+                score += 1000 + hist->get_history(pos, m, ply);
             }
             // Add this move to the captures list
             captures.scores[captures.size] = score;

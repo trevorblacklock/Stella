@@ -15,8 +15,8 @@ void History::clear() {
 
 void History::clear_killers_grandchildren(Color side, int ply) {
     assert(ply < MAX_PLY + 2);
-    killers[side][ply][0] = Move::none();
-    killers[side][ply][1] = Move::none();
+    killers[side][ply + 2][0] = Move::none();
+    killers[side][ply + 2][1] = Move::none();
 }
 
 Value History::get_history(Position* pos, Move m, int ply) const {
@@ -48,12 +48,19 @@ Value History::get_history(Position* pos, Move m, int ply) const {
                                   | (pos->pieces(us, ROOK) & threatByMinor)
                                   | (pos->pieces(us, BISHOP, KNIGHT) & threatByPawn);
 
-        Value v = get_butterfly(us, m) * 2
-                + get_continuation(pc, to, ply - 1)
-                + get_continuation(pc, to, ply - 2)
-                + get_continuation(pc, to, ply - 3)
-                + get_continuation(pc, to, ply - 4) / 4
-                + get_continuation(pc, to, ply - 6);
+        Value v;
+
+        // If in check we use a lower continuation history to account for unknowns
+        if (pos->checks())
+            v = get_butterfly(us, m)
+              + get_continuation(pc, to, ply);
+        else
+            v = get_butterfly(us, m) * 2
+              + get_continuation(pc, to, ply)
+              + get_continuation(pc, to, ply - 1)
+              + get_continuation(pc, to, ply - 2)
+              + get_continuation(pc, to, ply - 3)
+              + get_continuation(pc, to, ply - 5);
 
         v += bool(pos->check_squares(pt) & to) * 16000;
 
@@ -61,9 +68,8 @@ Value History::get_history(Position* pos, Move m, int ply) const {
                                      : pt == ROOK && !(threatByMinor & to)  ? 25000
                                      : !(threatByPawn & to)                 ? 15000 
                                      : 0) : 0;
-        v -= !(threatenedPieces & from) ? (pt == QUEEN && (threatByRook & to)) ? 50000
-                                        : (pt == ROOK && (threatByMinor & to)) ? 25000
-                                        : 0 : 0;
+        v -= (pt == QUEEN && (threatByRook & to)) ? 50000
+           : (pt == ROOK && (threatByMinor & to)) ? 25000 : 0;
 
         return v;
     }
@@ -97,8 +103,8 @@ Value History::get_eval(Color side, int ply) const {
 void History::set_killer(Color side, Move m, int ply) {
     assert(ply >= 0 && ply < MAX_PLY + 2);
     if (killers[side][ply][0] != m) {
-        killers[side][ply][1]  = killers[side][ply][0];
-        killers[side][ply][0]  = m;
+        killers[side][ply][1] = killers[side][ply][0];
+        killers[side][ply][0] = m;
     }
 }
 
